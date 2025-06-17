@@ -1,4 +1,4 @@
-Emma AI Assistant - User Journey
+Anna AI Assistant - User Journey
 User Profile: Alex Chen
 Tech entrepreneur, 32, runs a SaaS startup, gets 100+ emails daily, active on Twitter/LinkedIn, values efficiency
 
@@ -6,13 +6,13 @@ Journey 1: First-Time Setup & Onboarding
 Day 0: Discovery & Setup (Friday Evening)
 5:30 PM - Download & Install
 
-Alex downloads the Emma app after seeing a demo
+Alex downloads the Anna app after seeing a demo
 Opens app, greeted with clean onboarding screen
-Emma: "Hi! I'm Emma, your personal chief of staff. I'll help you manage your emails, social media, and coordinate with specialist agents. Let's get you set up!"
+Anna: "Hi! I'm Anna, your personal chief of staff. I'll help you manage your emails, social media, and coordinate with specialist agents. Let's get you set up!"
 
 5:35 PM - Permissions & Integrations
 
-Emma guides through Gmail OAuth connection
+Anna guides through Gmail OAuth connection
 Twitter/X account linking
 Calendar integration (Google Calendar)
 Notification preferences setup
