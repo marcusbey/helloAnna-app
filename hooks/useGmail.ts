@@ -1,34 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '@/stores/appStore';
+import { gmailService, EmailStats, EmailMessage } from '@/lib/gmail';
 
 export function useGmail() {
   const { user, setUser } = useAppStore();
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailStats, setEmailStats] = useState<EmailStats | null>(null);
+  const [recentEmails, setRecentEmails] = useState<EmailMessage[]>([]);
+  const [userEmail, setUserEmail] = useState<string>('');
 
   const connectGmail = async () => {
     setIsConnecting(true);
     setError(null);
     
     try {
-      // In a real app, we would implement OAuth flow with Google
-      // For this MVP, we'll simulate a successful connection
+      // Authenticate with Gmail using OAuth
+      const success = await gmailService.authenticate();
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Update user profile with Gmail connection
-      if (user) {
-        setUser({
-          ...user,
-          isGmailConnected: true,
-        });
+      if (success) {
+        // Get user's email address
+        const email = await gmailService.getUserEmail();
+        setUserEmail(email);
+        
+        // Update user profile with Gmail connection
+        if (user) {
+          setUser({
+            ...user,
+            isGmailConnected: true,
+          });
+        }
+        
+        // Load initial data
+        await loadGmailData();
       }
       
-      return true;
+      return success;
     } catch (error) {
       console.error('Failed to connect Gmail', error);
-      setError('Failed to connect to Gmail. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect to Gmail. Please try again.';
+      setError(errorMessage);
       return false;
     } finally {
       setIsConnecting(false);
@@ -37,11 +48,13 @@ export function useGmail() {
 
   const disconnectGmail = async () => {
     try {
-      // In a real app, we would revoke OAuth tokens
-      // For this MVP, we'll simulate a successful disconnection
+      // Disconnect from Gmail service
+      await gmailService.disconnect();
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Clear local data
+      setUserEmail('');
+      setEmailStats(null);
+      setRecentEmails([]);
       
       // Update user profile
       if (user) {
@@ -58,11 +71,68 @@ export function useGmail() {
     }
   };
 
+  // Load Gmail data (stats and recent emails)
+  const loadGmailData = async () => {
+    try {
+      const [stats, emails] = await Promise.all([
+        gmailService.getEmailStats(),
+        gmailService.getRecentEmails(10)
+      ]);
+      
+      setEmailStats(stats);
+      setRecentEmails(emails);
+    } catch (error) {
+      console.error('Failed to load Gmail data:', error);
+    }
+  };
+
+  // Send email through Gmail
+  const sendEmail = async (to: string, subject: string, body: string) => {
+    try {
+      await gmailService.sendEmail(to, subject, body);
+      return true;
+    } catch (error) {
+      console.error('Failed to send email:', error);
+      throw error;
+    }
+  };
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const isAuth = await gmailService.isAuthenticated();
+        if (isAuth) {
+          const email = await gmailService.getUserEmail();
+          setUserEmail(email);
+          
+          if (user) {
+            setUser({
+              ...user,
+              isGmailConnected: true,
+            });
+          }
+          
+          await loadGmailData();
+        }
+      } catch (error) {
+        console.error('Error checking Gmail auth:', error);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
   return {
     isGmailConnected: user?.isGmailConnected || false,
     isConnecting,
     error,
+    emailStats,
+    recentEmails,
+    userEmail,
     connectGmail,
     disconnectGmail,
+    loadGmailData,
+    sendEmail,
   };
 }
