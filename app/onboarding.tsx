@@ -18,6 +18,17 @@ import { WelcomeScreen } from "@/components/Onboarding/WelcomeScreen";
 import { UserProfile } from "@/lib/onboarding-ai";
 import { onboardingStorage } from "@/lib/onboarding-storage";
 
+// Separate interface for conversational onboarding data
+interface OnboardingUserInfo {
+  name: string;
+  email: string;
+  role: string;
+  company: string;
+  goals: string;
+  challenges: string;
+  communicationStyle: "formal" | "casual" | "friendly";
+}
+
 export default function OnboardingScreen() {
   const {
     onboardingStep,
@@ -32,6 +43,8 @@ export default function OnboardingScreen() {
   const [userSetupInfo, setUserSetupInfo] = useState<UserSetupInfo | null>(
     null
   );
+  const [onboardingUserInfo, setOnboardingUserInfo] =
+    useState<OnboardingUserInfo | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // Debug: Reset onboarding if needed (temporary)
@@ -142,7 +155,22 @@ export default function OnboardingScreen() {
   // Signup handlers
   const handleSignupComplete = (email?: string) => {
     if (userProfile && email) {
-      // Create user setup info from profile
+      // Create detailed onboarding user info from profile
+      const onboardingInfo: OnboardingUserInfo = {
+        name: userProfile.personal?.name || "",
+        email: email,
+        role: userProfile.personal?.role || "",
+        company: userProfile.personal?.company || "",
+        goals: userProfile.goals?.primaryGoals?.[0] || "",
+        challenges: userProfile.workStyle?.challenges?.[0] || "",
+        communicationStyle:
+          (userProfile.preferences?.communicationStyle as
+            | "formal"
+            | "casual"
+            | "friendly") || "formal",
+      };
+
+      // Also create UserSetupInfo for compatibility with existing components
       const setupInfo: UserSetupInfo = {
         name: userProfile.personal?.name || "",
         email: email,
@@ -155,11 +183,12 @@ export default function OnboardingScreen() {
         emailFrequency: "medium" as "high" | "medium" | "low",
       };
 
+      setOnboardingUserInfo(onboardingInfo);
       setUserSetupInfo(setupInfo);
 
       setUser({
         id: "1",
-        name: setupInfo.name,
+        name: onboardingInfo.name,
         email: email,
         isGmailConnected: false,
         preferences: {
@@ -182,11 +211,11 @@ export default function OnboardingScreen() {
   };
 
   const completeOnboarding = async (isGmailConnected: boolean) => {
-    if (userSetupInfo) {
+    if (onboardingUserInfo) {
       setUser({
         id: "1",
-        name: userSetupInfo.name,
-        email: userSetupInfo.email || "user@example.com",
+        name: onboardingUserInfo.name,
+        email: onboardingUserInfo.email || "user@example.com",
         isGmailConnected,
         preferences: {
           notificationsEnabled: true,
@@ -202,7 +231,7 @@ export default function OnboardingScreen() {
             ...userProfile,
             contact: {
               ...userProfile.contact,
-              email: userSetupInfo.email,
+              email: onboardingUserInfo.email,
             },
           });
         } catch (error) {
@@ -216,7 +245,7 @@ export default function OnboardingScreen() {
 
   const handleDashboardIntroComplete = () => {
     // Only mark as fully onboarded if user has completed signup
-    if (userSetupInfo?.email) {
+    if (onboardingUserInfo?.email) {
       setOnboarded(true);
       setAuthenticated(true);
       router.replace("/(tabs)");
@@ -294,7 +323,7 @@ export default function OnboardingScreen() {
       case "dashboard-intro":
         return (
           <DashboardIntroScreen
-            userName={userSetupInfo?.name || "User"}
+            userName={onboardingUserInfo?.name || "User"}
             onComplete={handleDashboardIntroComplete}
           />
         );

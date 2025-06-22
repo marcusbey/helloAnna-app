@@ -1,11 +1,9 @@
 import { colors } from "@/constants/colors";
 import { theme } from "@/constants/theme";
 import { useVoice } from "@/hooks/useVoice";
-import * as ImagePicker from "expo-image-picker";
-import { Camera, Mic, Phone, Send } from "lucide-react-native";
+import { Mic, Mic2, Send } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Keyboard,
   Platform,
   StyleSheet,
@@ -52,35 +50,36 @@ export const EnhancedChatInput: React.FC<EnhancedChatInputProps> = ({
     }
   };
 
-  const handleCameraPress = async () => {
-    try {
-      // Request camera permissions
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Camera Permission",
-          "Camera permission is required to take photos.",
-          [{ text: "OK" }]
-        );
-        return;
-      }
+  // Camera functionality commented out for now
+  // const handleCameraPress = async () => {
+  //   try {
+  //     // Request camera permissions
+  //     const { status } = await ImagePicker.requestCameraPermissionsAsync();
+  //     if (status !== "granted") {
+  //       Alert.alert(
+  //         "Camera Permission",
+  //         "Camera permission is required to take photos.",
+  //         [{ text: "OK" }]
+  //       );
+  //       return;
+  //     }
 
-      // Launch camera
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
+  //     // Launch camera
+  //     const result = await ImagePicker.launchCameraAsync({
+  //       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+  //       allowsEditing: true,
+  //       aspect: [4, 3],
+  //       quality: 0.8,
+  //     });
 
-      if (!result.canceled && result.assets[0]) {
-        onImageSelected?.(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error("Error taking photo:", error);
-      Alert.alert("Error", "Failed to take photo. Please try again.");
-    }
-  };
+  //     if (!result.canceled && result.assets[0]) {
+  //       onImageSelected?.(result.assets[0].uri);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error taking photo:", error);
+  //     Alert.alert("Error", "Failed to take photo. Please try again.");
+  //   }
+  // };
 
   const handleMicrophonePress = async () => {
     if (isRecording) {
@@ -98,14 +97,14 @@ export const EnhancedChatInput: React.FC<EnhancedChatInputProps> = ({
     <View style={styles.container}>
       {/* Main Input Container */}
       <View style={styles.inputContainer}>
-        {/* Camera Button */}
-        <TouchableOpacity
+        {/* Camera Button - Hidden for now */}
+        {/* <TouchableOpacity
           style={styles.actionButton}
           onPress={handleCameraPress}
           activeOpacity={0.7}
         >
           <Camera size={20} color={colors.gray[500]} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {/* Text Input */}
         <TextInput
@@ -160,13 +159,13 @@ export const EnhancedChatInput: React.FC<EnhancedChatInputProps> = ({
               />
             </TouchableOpacity>
 
-            {/* Voice Call Button */}
+            {/* Voice Call Button - Using voice icon instead of phone */}
             <TouchableOpacity
               style={[styles.actionButton, styles.voiceCallButton]}
               onPress={handleVoiceCallPress}
               activeOpacity={0.7}
             >
-              <Phone size={20} color={colors.white} />
+              <Mic2 size={20} color={colors.white} />
             </TouchableOpacity>
           </>
         )}
@@ -179,18 +178,17 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    backgroundColor: colors.background,
+    backgroundColor: colors.white,
     borderTopWidth: 1,
-    borderTopColor: colors.gray[200],
+    borderTopColor: colors.gray[100],
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "flex-end",
-    backgroundColor: colors.white,
+    backgroundColor: colors.gray[50],
     borderRadius: theme.borderRadius.lg,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
-    ...theme.shadows.sm,
     minHeight: 48,
   },
   input: {
