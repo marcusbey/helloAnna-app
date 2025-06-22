@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { publicProcedure } from "../../../create-context";
+import { gmailService } from "@/lib/gmail";
+import { openaiService } from "@/lib/openai";
 
 export default publicProcedure
   .input(z.object({ 
@@ -8,27 +10,94 @@ export default publicProcedure
     limit: z.number().optional().default(10)
   }))
   .query(async ({ input }) => {
-    // In a real app, this would fetch emails from the database
-    // For this MVP, we'll return mock data
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Generate mock email summaries
-    const mockEmails = Array.from({ length: input.limit }, (_, i) => ({
-      id: `email-${i + 1}`,
-      sender: `sender-${i + 1}@example.com`,
-      subject: `Email subject ${i + 1}`,
-      preview: `This is a preview of email ${i + 1}. It contains a brief summary of the email content...`,
-      date: new Date(Date.now() - i * 3600000).toISOString(),
-      isRead: Math.random() > 0.3,
-      isPriority: Math.random() > 0.8,
-      category: input.category || 'primary'
-    }));
-    
-    return {
-      emails: mockEmails,
-      totalCount: 120,
-      unreadCount: 15
-    };
+    try {
+      // Check if user is authenticated with Gmail
+      const isAuthenticated = await gmailService.isAuthenticated();
+      
+      if (!isAuthenticated) {
+        throw new Error('Gmail not connected. Please authenticate first.');
+      }
+
+      // Get recent emails
+      const recentEmails = await gmailService.getRecentEmails(input.limit);
+      
+      // Get email statistics
+      const emailStats = await gmailService.getEmailStats();
+      
+      // Process emails with AI categorization and priority detection
+      const processedEmails = await Promise.all(
+        recentEmails.map(async (email) => {
+          try {
+            // Use Emma to categorize and prioritize emails
+            const response = await openaiService.processEmailRequest({
+              subject: email.subject,
+              sender: email.from,
+              content: email.snippet,
+              action: 'categorize'
+            });
+            
+            const priorityResponse = await openaiService.processEmailRequest({
+              subject: email.subject,
+              sender: email.from,
+              content: email.snippet,
+              action: 'priority'
+            });
+            
+            // Extract category and priority from AI responses
+            const category = extractCategory(response.message);
+            const isPriority = extractPriority(priorityResponse.message);
+            
+            return {
+              id: email.id,
+              sender: email.from,
+              subject: email.subject,
+              preview: email.snippet,
+              date: email.date,
+              isRead: email.isRead,
+              isPriority,
+              category,
+              aiSummary: response.message
+            };
+          } catch (error) {
+            console.error('Error processing email with AI:', error);
+            // Fallback without AI processing
+            return {
+              id: email.id,
+              sender: email.from,
+              subject: email.subject,
+              preview: email.snippet,
+              date: email.date,
+              isRead: email.isRead,
+              isPriority: false,
+              category: input.category || 'primary'
+            };
+          }
+        })
+      );
+      
+      return {
+        emails: processedEmails,
+        totalCount: emailStats.totalEmails,
+        unreadCount: emailStats.unreadCount
+      };
+    } catch (error) {
+      console.error('Email summary error:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to get email summary');
+    }
   });
+
+// Helper functions to extract AI insights
+function extractCategory(aiResponse: string): string {
+  const response = aiResponse.toLowerCase();
+  if (response.includes('work') || response.includes('business')) return 'primary';
+  if (response.includes('social') || response.includes('facebook') || response.includes('twitter')) return 'social';
+  if (response.includes('promotion') || response.includes('marketing') || response.includes('deal')) return 'promotions';
+  if (response.includes('newsletter') || response.includes('update')) return 'updates';
+  if (response.includes('forum') || response.includes('discussion')) return 'forums';
+  return 'primary';
+}
+
+function extractPriority(aiResponse: string): boolean {
+  const response = aiResponse.toLowerCase();
+  return response.includes('high') || response.includes('urgent') || response.includes('important');
+}
