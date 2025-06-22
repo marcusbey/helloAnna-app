@@ -1,5 +1,8 @@
-import { LinearGradient } from "expo-linear-gradient";
-import { Mic, Send, User } from "lucide-react-native";
+import { Avatar } from "@/components/UI/Avatar";
+import { colors } from "@/constants/colors";
+import { theme } from "@/constants/theme";
+import { router } from "expo-router";
+import { ArrowLeft, Mic, Send } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -7,6 +10,7 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -38,6 +42,7 @@ export default function ConversationalOnboarding({
     useState<OnboardingQuestion | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const typingAnimation = useRef(new Animated.Value(0)).current;
+  const buttonAnimation = useRef(new Animated.Value(0)).current;
 
   const { isRecording, startRecording, stopRecording, transcript } = useVoice();
 
@@ -52,6 +57,15 @@ export default function ConversationalOnboarding({
       setCurrentInput(transcript);
     }
   }, [transcript]);
+
+  useEffect(() => {
+    // Animate button transformation
+    Animated.timing(buttonAnimation, {
+      toValue: currentInput.trim() ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [currentInput]);
 
   useEffect(() => {
     // Auto-scroll to bottom when new messages arrive
@@ -173,6 +187,11 @@ export default function ConversationalOnboarding({
     }
   };
 
+  const handleBackPress = () => {
+    // Navigate to settings
+    router.push("/(tabs)/settings");
+  };
+
   const renderMessage = (message: Message) => {
     const isAnna = message.type === "anna";
 
@@ -186,9 +205,11 @@ export default function ConversationalOnboarding({
       >
         <View style={styles.messageRow}>
           {isAnna && (
-            <View style={styles.annaAvatar}>
-              <Text style={styles.annaAvatarText}>A</Text>
-            </View>
+            <Avatar
+              source="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80"
+              size={32}
+              style={styles.avatar}
+            />
           )}
 
           <View
@@ -222,12 +243,6 @@ export default function ConversationalOnboarding({
               </View>
             )}
           </View>
-
-          {!isAnna && (
-            <View style={styles.userAvatar}>
-              <User size={16} color="#666" />
-            </View>
-          )}
         </View>
       </View>
     );
@@ -236,9 +251,11 @@ export default function ConversationalOnboarding({
   const renderTypingIndicator = () => (
     <View style={styles.typingContainer}>
       <View style={styles.messageRow}>
-        <View style={styles.annaAvatar}>
-          <Text style={styles.annaAvatarText}>A</Text>
-        </View>
+        <Avatar
+          source="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80"
+          size={32}
+          style={styles.avatar}
+        />
         <View
           style={[styles.messageBubble, styles.annaBubble, { marginLeft: 8 }]}
         >
@@ -259,118 +276,253 @@ export default function ConversationalOnboarding({
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
-      >
-        {/* Header */}
-        <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
-          <Text style={styles.headerTitle}>Getting to Know You</Text>
-          <Text style={styles.headerSubtitle}>
-            Let's have a natural conversation! Anna wants to understand how she can best help you.
-          </Text>
-        </LinearGradient>
+    <>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={colors.white}
+        translucent={false}
+      />
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardView}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={handleBackPress}
+              activeOpacity={0.7}
+            >
+              <ArrowLeft size={18} color={colors.text} />
+            </TouchableOpacity>
 
-        {/* Chat Area */}
-        <View style={styles.chatContainer}>
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.messagesContainer}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.messagesContent}
-          >
-            {messages.map(renderMessage)}
-            {isTyping && renderTypingIndicator()}
-          </ScrollView>
-
-          {/* Input Area */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputRow}>
-              <View style={styles.textInputContainer}>
-                <TextInput
-                  value={currentInput}
-                  onChangeText={setCurrentInput}
-                  placeholder="Type your response..."
-                  placeholderTextColor="#999"
-                  style={styles.textInput}
-                  multiline
-                  maxLength={500}
-                />
+            <View style={styles.centerSection}>
+              <Avatar
+                source="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80"
+                size={28}
+                style={styles.headerAvatar}
+              />
+              <View style={styles.nameContainer}>
+                <Text style={styles.name}>Anna</Text>
+                <Text style={styles.status}>Getting to know you</Text>
               </View>
+            </View>
 
-              {/* Voice Button */}
-              <TouchableOpacity
-                onPress={handleVoiceToggle}
-                style={[
-                  styles.actionButton,
-                  isRecording ? styles.recordingButton : styles.micButton,
-                ]}
-              >
-                <Mic size={20} color={isRecording ? "white" : "#666"} />
-              </TouchableOpacity>
+            <View style={styles.rightSpace} />
+          </View>
 
-              {/* Send Button */}
-              <TouchableOpacity
-                onPress={handleSendMessage}
-                disabled={!currentInput.trim()}
-                style={[
-                  styles.actionButton,
-                  currentInput.trim()
-                    ? styles.sendButton
-                    : styles.disabledButton,
-                ]}
-              >
-                <Send
-                  size={20}
-                  color={currentInput.trim() ? "white" : "#666"}
-                />
-              </TouchableOpacity>
+          {/* Introduction Banner */}
+          <View style={styles.introBanner}>
+            <Text style={styles.introTitle}>
+              Let's have a natural conversation!
+            </Text>
+            <Text style={styles.introSubtitle}>
+              Anna wants to understand how she can best help you.
+            </Text>
+          </View>
+
+          {/* Chat Area */}
+          <View style={styles.chatContainer}>
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.messagesContainer}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.messagesContent}
+            >
+              {messages.map(renderMessage)}
+              {isTyping && renderTypingIndicator()}
+            </ScrollView>
+
+            {/* Input Area */}
+            <View style={styles.inputContainer}>
+              <View style={styles.inputRow}>
+                <View style={styles.textInputContainer}>
+                  <TextInput
+                    value={currentInput}
+                    onChangeText={setCurrentInput}
+                    placeholder="Type your response..."
+                    placeholderTextColor={colors.gray[400]}
+                    style={styles.textInput}
+                    multiline
+                    maxLength={500}
+                    onSubmitEditing={() => {
+                      // Enter: Send message
+                      if (currentInput.trim()) {
+                        handleSendMessage();
+                      }
+                    }}
+                    submitBehavior="submit"
+                    blurOnSubmit={false}
+                  />
+
+                  {/* Voice/Send Button inside input */}
+                  <TouchableOpacity
+                    onPress={
+                      currentInput.trim()
+                        ? handleSendMessage
+                        : handleVoiceToggle
+                    }
+                    style={styles.inputActionButton}
+                  >
+                    <Animated.View
+                      style={[
+                        styles.buttonBackground,
+                        {
+                          backgroundColor: buttonAnimation.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [
+                              isRecording ? colors.error : colors.gray[100],
+                              colors.primary,
+                            ],
+                          }),
+                          transform: [
+                            {
+                              scale: buttonAnimation.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [1, 1.05],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    />
+                    <Animated.View
+                      style={[
+                        styles.buttonIconContainer,
+                        {
+                          transform: [
+                            {
+                              scale: buttonAnimation.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [1, 1.1],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    >
+                      <Animated.View
+                        style={{
+                          opacity: currentInput.trim() ? buttonAnimation : 1,
+                          position: "absolute",
+                        }}
+                      >
+                        <Send size={16} color={colors.white} />
+                      </Animated.View>
+                      <Animated.View
+                        style={{
+                          opacity: currentInput.trim()
+                            ? buttonAnimation.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [1, 0],
+                              })
+                            : 1,
+                          position: "absolute",
+                        }}
+                      >
+                        <Mic
+                          size={16}
+                          color={isRecording ? colors.white : colors.gray[500]}
+                        />
+                      </Animated.View>
+                    </Animated.View>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.white,
   },
   keyboardView: {
     flex: 1,
   },
   header: {
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[100],
+    minHeight: 50,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 8,
+  backButton: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  headerSubtitle: {
+  centerSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    marginHorizontal: theme.spacing.sm,
+  },
+  headerAvatar: {
+    marginRight: theme.spacing.xs,
+  },
+  nameContainer: {
+    alignItems: "center",
+  },
+  name: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 1,
+  },
+  status: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: "500",
+  },
+  rightSpace: {
+    width: 28,
+  },
+  introBanner: {
+    backgroundColor: colors.gray[50],
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[100],
+  },
+  introTitle: {
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
-    lineHeight: 22,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  introSubtitle: {
+    fontSize: 14,
+    color: colors.gray[500],
+    textAlign: "center",
+    lineHeight: 20,
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
   },
   messagesContainer: {
     flex: 1,
   },
   messagesContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   messageContainer: {
-    marginBottom: 16,
+    marginBottom: theme.spacing.md,
   },
   annaMessageContainer: {
     alignItems: "flex-start",
@@ -383,71 +535,53 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     maxWidth: "85%",
   },
+  avatar: {
+    marginBottom: 2,
+  },
   messageBubble: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
     borderRadius: 20,
     maxWidth: "100%",
   },
   annaBubble: {
-    backgroundColor: "#f0f0f0",
-    borderBottomLeftRadius: 4,
+    backgroundColor: colors.gray[100],
+    borderBottomLeftRadius: 6,
   },
   userBubble: {
-    backgroundColor: "#007AFF",
-    borderBottomRightRadius: 4,
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 6,
   },
   messageText: {
     fontSize: 16,
     lineHeight: 22,
   },
   annaMessageText: {
-    color: "#333333",
+    color: colors.text,
   },
   userMessageText: {
-    color: "#ffffff",
-  },
-  annaAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#667eea",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  annaAvatarText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  userAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#e0e0e0",
-    alignItems: "center",
-    justifyContent: "center",
+    color: colors.white,
   },
   choicesContainer: {
-    marginTop: 12,
-    gap: 8,
+    marginTop: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   choiceButton: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: "#007AFF",
+    borderColor: colors.primary,
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     alignItems: "center",
   },
   choiceButtonText: {
-    color: "#007AFF",
+    color: colors.primary,
     fontSize: 14,
     fontWeight: "500",
   },
   typingContainer: {
-    marginBottom: 16,
+    marginBottom: theme.spacing.md,
     alignItems: "flex-start",
   },
   typingDots: {
@@ -457,37 +591,65 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   typingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#999999",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.gray[400],
     marginHorizontal: 2,
   },
   inputContainer: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
     borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderTopColor: colors.gray[100],
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 8,
+    gap: theme.spacing.xs,
   },
   textInputContainer: {
     flex: 1,
-    backgroundColor: "#f8f8f8",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minHeight: 40,
-    maxHeight: 100,
+    backgroundColor: colors.gray[50],
+    borderRadius: 24,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    paddingRight: 44, // Make room for the smaller button
+    minHeight: 48,
+    maxHeight: 120,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    position: "relative",
   },
   textInput: {
     fontSize: 16,
-    color: "#333333",
+    color: colors.text,
     textAlignVertical: "center",
+    minHeight: 20,
+  },
+  inputActionButton: {
+    position: "absolute",
+    right: 8,
+    bottom: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  buttonIconContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 18,
+    height: 18,
+  },
+  buttonBackground: {
+    position: "absolute",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   actionButton: {
     width: 40,
@@ -495,17 +657,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.gray[100],
   },
   micButton: {
-    backgroundColor: "#f0f0f0",
+    backgroundColor: colors.gray[100],
   },
   recordingButton: {
-    backgroundColor: "#ff4444",
+    backgroundColor: colors.error,
   },
   sendButton: {
-    backgroundColor: "#007AFF",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  disabledButton: {
-    backgroundColor: "#f0f0f0",
+  sendButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  sendButtonDisabled: {
+    backgroundColor: colors.gray[100],
   },
 });

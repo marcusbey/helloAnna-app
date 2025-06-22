@@ -51,7 +51,7 @@ export default function OnboardingScreen() {
   useEffect(() => {
     const shouldReset = false; // Set to true to force reset for testing
     const skipToConversation = false; // Skip directly to conversation for testing
-    const forceCompleteReset = true;
+    const forceCompleteReset = false; // Turn off debug reset
     if (forceCompleteReset) {
       console.log("🔄 Force complete reset including persisted data");
       resetOnboarding();
@@ -141,19 +141,18 @@ export default function OnboardingScreen() {
   const handleConversationComplete = async (profile: UserProfile) => {
     setUserProfile(profile);
 
-    // Save to database
-    try {
-      await onboardingStorage.saveOnboardingProfile(profile);
-      console.log("Profile saved successfully");
-    } catch (error) {
-      console.error("Failed to save profile:", error);
-    }
+    // Don't save to database yet - user isn't authenticated
+    // We'll save after signup/authentication is complete
+    console.log(
+      "✅ Conversational onboarding complete, profile stored locally"
+    );
+    console.log("📋 Profile data:", JSON.stringify(profile, null, 2));
 
     setOnboardingStep("signup");
   };
 
   // Signup handlers
-  const handleSignupComplete = (email?: string) => {
+  const handleSignupComplete = async (email?: string) => {
     if (userProfile && email) {
       // Create detailed onboarding user info from profile
       const onboardingInfo: OnboardingUserInfo = {
@@ -197,6 +196,25 @@ export default function OnboardingScreen() {
           darkMode: false,
         },
       });
+
+      // Set authenticated state first
+      setAuthenticated(true);
+
+      // Now save profile to database after authentication
+      try {
+        const profileWithEmail = {
+          ...userProfile,
+          contact: {
+            ...userProfile.contact,
+            email: email,
+          },
+        };
+        await onboardingStorage.saveOnboardingProfile(profileWithEmail);
+        console.log("✅ Profile saved to database after authentication");
+      } catch (error) {
+        console.error("❌ Failed to save profile to database:", error);
+        // Continue with onboarding even if save fails
+      }
     }
     setOnboardingStep("gmail-connect");
   };
@@ -224,18 +242,28 @@ export default function OnboardingScreen() {
         },
       });
 
-      // Update stored profile with Gmail connection status
-      if (userProfile) {
+      // Profile was already saved in handleSignupComplete
+      // Just update Gmail connection status if needed
+      if (isGmailConnected && userProfile) {
         try {
-          await onboardingStorage.saveOnboardingProfile({
+          const updatedProfile = {
             ...userProfile,
             contact: {
               ...userProfile.contact,
               email: onboardingUserInfo.email,
             },
-          });
+            preferences: {
+              ...userProfile.preferences,
+              gmailConnected: true,
+            },
+          };
+          await onboardingStorage.saveOnboardingProfile(updatedProfile);
+          console.log("✅ Profile updated with Gmail connection status");
         } catch (error) {
-          console.error("Failed to update profile with Gmail status:", error);
+          console.error(
+            "❌ Failed to update profile with Gmail status:",
+            error
+          );
         }
       }
     }

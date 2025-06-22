@@ -1,4 +1,28 @@
-import { openaiService } from './openai';
+import Constants from 'expo-constants';
+import OpenAI from 'openai';
+
+// Create a dedicated OpenAI instance for onboarding (no user context needed)
+const onboardingOpenAI = new OpenAI({
+  apiKey: Constants.expoConfig?.extra?.EXPO_PUBLIC_OPENAI_API_KEY || process.env.EXPO_PUBLIC_OPENAI_API_KEY,
+});
+
+async function sendOnboardingMessage(prompt: string): Promise<{ message: string }> {
+  try {
+    const completion = await onboardingOpenAI.chat.completions.create({
+      model: process.env.EXPO_PUBLIC_AI_MODEL || 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 1000,
+    });
+
+    return {
+      message: completion.choices[0]?.message?.content || 'Sorry, I had trouble with that request.'
+    };
+  } catch (error) {
+    console.error('Onboarding OpenAI Error:', error);
+    throw new Error('AI service temporarily unavailable');
+  }
+}
 
 export interface OnboardingQuestion {
   id: string;
@@ -51,7 +75,7 @@ class OnboardingAIService {
   private responses: OnboardingResponse[] = [];
   private currentProfile: Partial<UserProfile> = {};
   private conversationFlow: string[] = []; // Track conversation progression
-  
+
   // Core information we need to collect organically
   private informationGoals = {
     name: { collected: false, value: null },
@@ -117,9 +141,9 @@ Return a JSON response:
 Be conversational, not interrogative!`;
 
     try {
-      const response = await openaiService.sendMessage(prompt);
+      const response = await sendOnboardingMessage(prompt);
       const aiResponse = JSON.parse(response.message);
-      
+
       return {
         id: `ai_generated_${Date.now()}`,
         type: aiResponse.type || 'open',
@@ -131,7 +155,7 @@ Be conversational, not interrogative!`;
       };
     } catch (error) {
       console.error('Error generating AI question:', error);
-      
+
       // Fallback to simple questions if AI fails
       return this.getFallbackQuestion(uncollectedInfo[0]);
     }
@@ -148,9 +172,12 @@ Be conversational, not interrogative!`;
 
     this.responses.push(response);
     this.conversationFlow.push(`User: ${answer}`);
-    
+
     // Use AI to extract structured information from the user's natural response
     await this.extractInformationFromResponse(answer);
+
+    // Log progress for debugging
+    this.logProgress();
   }
 
   // Use AI to extract structured information from user responses
@@ -175,9 +202,9 @@ Example: {"name": "Marcus", "role": "startup founder"}
 JSON:`;
 
     try {
-      const response = await openaiService.sendMessage(prompt);
+      const response = await sendOnboardingMessage(prompt);
       const extractedInfo = JSON.parse(response.message);
-      
+
       // Update our information goals
       Object.entries(extractedInfo).forEach(([key, value]) => {
         if (this.informationGoals[key] && value) {
@@ -189,17 +216,39 @@ JSON:`;
 
       // Update user profile with extracted information
       await this.updateProfileFromExtractedInfo(extractedInfo);
-      
+
     } catch (error) {
       console.error('Error extracting information:', error);
     }
+  }
+
+  // Log current progress for debugging
+  private logProgress(): void {
+    const collectedCount = Object.values(this.informationGoals).filter(info => info.collected).length;
+    const totalCount = Object.keys(this.informationGoals).length;
+    const collectedInfo = Object.entries(this.informationGoals)
+      .filter(([key, info]) => info.collected)
+      .map(([key]) => key);
+
+    console.log(`🎯 Current onboarding step: ${this.getCurrentStep()}`);
+    console.log(`📊 Onboarding progress: ${collectedCount}/${Math.min(4, totalCount)} essential info collected`);
+    console.log(`✅ Collected: ${collectedInfo.join(', ')}`);
+  }
+
+  // Get current step for debugging
+  private getCurrentStep(): string {
+    if (!this.informationGoals.name.collected) return 'conversation-name';
+    if (!this.informationGoals.role.collected) return 'conversation-role';
+    if (!this.informationGoals.email_challenges.collected) return 'conversation-challenges';
+    if (!this.informationGoals.work_goals.collected) return 'conversation-goals';
+    return 'conversation-complete';
   }
 
   // Helper methods
   private mapInfoToCategory(targetInfo: string): string {
     const categoryMap = {
       'name': 'personal',
-      'role': 'personal', 
+      'role': 'personal',
       'company': 'personal',
       'email_challenges': 'work',
       'email_volume': 'work',
@@ -213,7 +262,7 @@ JSON:`;
   private getFallbackQuestion(targetInfo: string): OnboardingQuestion {
     const fallbackQuestions = {
       'name': "What should I call you?",
-      'role': "What do you do for work?", 
+      'role': "What do you do for work?",
       'company': "Tell me about where you work!",
       'email_challenges': "What's the biggest challenge you face with email?",
       'email_volume': "How many emails do you typically get per day?",
@@ -235,54 +284,54 @@ JSON:`;
   private async updateProfileFromExtractedInfo(extractedInfo: any): Promise<void> {
     // Update the user profile structure with extracted information
     if (extractedInfo.name) {
-      this.currentProfile.personal = { 
-        ...this.currentProfile.personal, 
-        name: extractedInfo.name 
+      this.currentProfile.personal = {
+        ...this.currentProfile.personal,
+        name: extractedInfo.name
       };
     }
-    
+
     if (extractedInfo.role) {
-      this.currentProfile.personal = { 
-        ...this.currentProfile.personal, 
-        role: extractedInfo.role 
+      this.currentProfile.personal = {
+        ...this.currentProfile.personal,
+        role: extractedInfo.role
       };
     }
-    
+
     if (extractedInfo.company) {
-      this.currentProfile.personal = { 
-        ...this.currentProfile.personal, 
-        company: extractedInfo.company 
+      this.currentProfile.personal = {
+        ...this.currentProfile.personal,
+        company: extractedInfo.company
       };
     }
-    
+
     if (extractedInfo.email_challenges) {
       this.currentProfile.workStyle = {
         ...this.currentProfile.workStyle,
         challenges: [extractedInfo.email_challenges]
       };
     }
-    
+
     if (extractedInfo.email_volume) {
       this.currentProfile.workStyle = {
         ...this.currentProfile.workStyle,
         emailVolume: extractedInfo.email_volume
       };
     }
-    
+
     if (extractedInfo.work_goals) {
       this.currentProfile.goals = {
         ...this.currentProfile.goals,
         primaryGoals: [extractedInfo.work_goals]
       };
     }
-    
+
     if (extractedInfo.communication_style) {
       this.currentProfile.preferences = {
         ...this.currentProfile.preferences,
         communicationStyle: extractedInfo.communication_style
       };
     }
-    
+
     if (extractedInfo.automation_preference) {
       this.currentProfile.preferences = {
         ...this.currentProfile.preferences,
@@ -294,17 +343,17 @@ JSON:`;
   // Check if onboarding is complete based on collected information
   isOnboardingComplete(): boolean {
     const essentialInfo = ['name', 'role', 'email_challenges', 'automation_preference'];
-    const collectedEssentialInfo = essentialInfo.filter(info => 
+    const collectedEssentialInfo = essentialInfo.filter(info =>
       this.informationGoals[info]?.collected
     );
-    
+
     // Need at least 75% of essential information
     const completionThreshold = 0.75;
     const isComplete = collectedEssentialInfo.length >= essentialInfo.length * completionThreshold;
-    
+
     console.log(`📊 Onboarding progress: ${collectedEssentialInfo.length}/${essentialInfo.length} essential info collected`);
     console.log(`✅ Collected: ${collectedEssentialInfo.join(', ')}`);
-    
+
     return isComplete;
   }
 
@@ -337,16 +386,16 @@ Let's get you set up so I can start making your work life easier! 🚀`;
 
   private async updateUserProfile(response: OnboardingResponse): Promise<void> {
     const { questionId, answer, category } = response;
-    
+
     // Map responses to profile structure
     switch (questionId) {
       case 'intro':
-        this.currentProfile.personal = { 
-          ...this.currentProfile.personal, 
-          name: answer 
+        this.currentProfile.personal = {
+          ...this.currentProfile.personal,
+          name: answer
         };
         break;
-        
+
       case 'role_discovery':
         // Use AI to extract role, company, industry from free text
         const roleInfo = await this.extractRoleInfo(answer);
@@ -355,35 +404,35 @@ Let's get you set up so I can start making your work life easier! 🚀`;
           ...roleInfo
         };
         break;
-        
+
       case 'email_pain_points':
         this.currentProfile.workStyle = {
           ...this.currentProfile.workStyle,
           challenges: [answer]
         };
         break;
-        
+
       case 'daily_email_volume':
         this.currentProfile.workStyle = {
           ...this.currentProfile.workStyle,
           emailVolume: answer
         };
         break;
-        
+
       case 'work_goals':
         this.currentProfile.goals = {
           ...this.currentProfile.goals,
           primaryGoals: [answer]
         };
         break;
-        
+
       case 'communication_style':
         this.currentProfile.preferences = {
           ...this.currentProfile.preferences,
           communicationStyle: answer
         };
         break;
-        
+
       case 'automation_comfort':
         this.currentProfile.preferences = {
           ...this.currentProfile.preferences,
@@ -403,14 +452,14 @@ If information is not available, omit the key.
 Example: {"role": "Product Manager", "company": "Acme Corp", "industry": "Technology"}
 `;
 
-      const response = await openaiService.sendMessage(prompt);
+      const response = await sendOnboardingMessage(prompt);
       if (response) {
         return JSON.parse(response);
       }
     } catch (error) {
       console.error('Error extracting role info:', error);
     }
-    
+
     return { role: roleDescription };
   }
 }

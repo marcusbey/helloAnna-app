@@ -1,5 +1,5 @@
-import OpenAI from 'openai';
 import Constants from 'expo-constants';
+import OpenAI from 'openai';
 import { onboardingStorage } from './onboarding-storage';
 
 const openai = new OpenAI({
@@ -57,9 +57,15 @@ export class OpenAIService {
         timestamp: Date.now()
       });
 
-      // Get user's onboarding insights for personalized responses
-      const insights = await onboardingStorage.getOnboardingInsights();
-      
+      // Get user's onboarding insights for personalized responses (if authenticated)
+      let insights = null;
+      try {
+        insights = await onboardingStorage.getOnboardingInsights();
+      } catch (error) {
+        // User not authenticated yet - this is normal during onboarding conversation
+        console.log('No onboarding insights available (user not authenticated yet)');
+      }
+
       // Prepare messages for OpenAI
       let messages = this.messages.map(msg => ({
         role: msg.role,
@@ -112,7 +118,7 @@ Adapt your responses to match their communication style and address their specif
 
     } catch (error) {
       console.error('OpenAI Service Error:', error);
-      
+
       // Provide helpful error messages
       if (error instanceof Error) {
         if (error.message.includes('API key')) {
@@ -125,7 +131,7 @@ Adapt your responses to match their communication style and address their specif
           throw new Error('Network error. Please check your internet connection.');
         }
       }
-      
+
       throw new Error('I encountered an error while processing your request. Please try again.');
     }
   }
@@ -149,7 +155,7 @@ Adapt your responses to match their communication style and address their specif
     recentActivity?: string;
   }): void {
     const contextMessage = `User context update: ${JSON.stringify(context)}`;
-    
+
     // Update system message with current context
     this.messages[0] = {
       role: 'system',
@@ -173,16 +179,16 @@ Adapt your responses to match their communication style and address their specif
     switch (emailData.action) {
       case 'summarize':
         return `Please summarize this email:\nFrom: ${emailData.sender}\nSubject: ${emailData.subject}\nContent: ${emailData.content}`;
-      
+
       case 'reply':
         return `Help me draft a professional reply to this email:\nFrom: ${emailData.sender}\nSubject: ${emailData.subject}\nContent: ${emailData.content}`;
-      
+
       case 'categorize':
         return `Categorize this email (work, personal, promotional, urgent, etc.):\nFrom: ${emailData.sender}\nSubject: ${emailData.subject}`;
-      
+
       case 'priority':
         return `Rate the priority of this email (high, medium, low) and explain why:\nFrom: ${emailData.sender}\nSubject: ${emailData.subject}\nContent: ${emailData.content?.substring(0, 200)}`;
-      
+
       default:
         return `Help me with this email:\nFrom: ${emailData.sender}\nSubject: ${emailData.subject}`;
     }

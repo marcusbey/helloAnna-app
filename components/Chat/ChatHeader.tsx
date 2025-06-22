@@ -33,14 +33,14 @@ export const ChatHeader: React.FC = () => {
             onPress={handleBackPress}
             activeOpacity={0.7}
           >
-            <ArrowLeft size={20} color={colors.text} />
+            <ArrowLeft size={18} color={colors.text} />
           </TouchableOpacity>
 
           {/* Anna's Profile - Center */}
           <View style={styles.centerSection}>
             <Avatar
               source="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80"
-              size={32}
+              size={28}
               style={styles.avatar}
             />
             <View style={styles.nameContainer}>
@@ -66,14 +66,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[100],
+    minHeight: 50, // Smaller fixed height
   },
   backButton: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -91,17 +92,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   name: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     color: colors.text,
     marginBottom: 1,
   },
   status: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.success,
     fontWeight: "500",
   },
   rightSpace: {
-    width: 32, // Same as backButton for balance
+    width: 28, // Same as backButton for balance
   },
 });

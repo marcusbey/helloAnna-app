@@ -1,7 +1,7 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
-import { MessageSquare, Settings } from 'lucide-react-native';
-import { colors } from '@/constants/colors';
+import { colors } from "@/constants/colors";
+import { Tabs } from "expo-router";
+import { MessageSquare, Settings } from "lucide-react-native";
+import React from "react";
 
 export default function TabLayout() {
   return (
@@ -10,16 +10,15 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.gray[400],
         tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: colors.gray[200],
+          display: "none",
         },
-        headerShown: true,
+        headerShown: false,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Chat',
+          title: "Chat",
           tabBarIcon: ({ color, size }) => (
             <MessageSquare size={size} color={color} />
           ),
@@ -28,7 +27,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: "Settings",
           tabBarIcon: ({ color, size }) => (
             <Settings size={size} color={color} />
           ),
