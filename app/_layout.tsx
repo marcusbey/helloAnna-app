@@ -6,6 +6,7 @@ import { useSafeAppStore } from "@/stores/appStore";
 import { Stack, router, useSegments } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 function AppContent() {
@@ -168,14 +169,16 @@ function AppContent() {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <StoreProvider>
-        {/* Temporarily disable Clerk wrapper until env vars are set */}
-        {/* <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}> */}
-        <AppContent />
-        {/* </ClerkProvider> */}
-      </StoreProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <StoreProvider>
+          {/* Temporarily disable Clerk wrapper until env vars are set */}
+          {/* <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}> */}
+          <AppContent />
+          {/* </ClerkProvider> */}
+        </StoreProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

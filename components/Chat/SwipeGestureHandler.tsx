@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import { router } from 'expo-router';
+import { router } from "expo-router";
+import React from "react";
+import { StyleSheet, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 interface SwipeGestureHandlerProps {
   children: React.ReactNode;
@@ -12,32 +12,24 @@ export const SwipeGestureHandler: React.FC<SwipeGestureHandlerProps> = ({
   children,
   onSwipeRight,
 }) => {
-  const handleGestureStateChange = (event: any) => {
-    if (event.nativeEvent.state === State.END) {
-      const { translationX, velocityX } = event.nativeEvent;
-      
-      // Check if it's a right swipe with sufficient distance and velocity
-      if (translationX > 100 && velocityX > 500) {
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .onEnd((event) => {
+      // Detect swipe right gesture
+      if (event.translationX > 100 && Math.abs(event.velocityX) > 500) {
         if (onSwipeRight) {
           onSwipeRight();
         } else {
           // Default action: navigate to settings
-          router.push('/(tabs)/settings');
+          router.push("/(tabs)/settings");
         }
       }
-    }
-  };
+    });
 
   return (
-    <PanGestureHandler
-      onHandlerStateChange={handleGestureStateChange}
-      activeOffsetX={[-10, 10]}
-      failOffsetY={[-5, 5]}
-    >
-      <View style={styles.container}>
-        {children}
-      </View>
-    </PanGestureHandler>
+    <GestureDetector gesture={panGesture}>
+      <View style={styles.container}>{children}</View>
+    </GestureDetector>
   );
 };
 
