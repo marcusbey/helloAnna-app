@@ -4,6 +4,7 @@ import { Message } from "@/types";
 import React, { useEffect, useRef } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { EnhancedChatInput } from "./EnhancedChatInput";
 import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 
@@ -34,6 +36,18 @@ export const ChatScreen: React.FC = () => {
   );
 
   const keyExtractor = (item: Message) => item.id;
+
+  const handleImageSelected = (imageUri: string) => {
+    // Handle image selection - for now, just show an alert
+    Alert.alert("Image Selected", `Image URI: ${imageUri}`);
+    // TODO: Implement image message sending
+  };
+
+  const handleVoiceCallStart = () => {
+    // Handle voice call start
+    Alert.alert("Voice Call", "Starting voice call with Anna...");
+    // TODO: Implement voice call functionality
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
@@ -64,7 +78,12 @@ export const ChatScreen: React.FC = () => {
           {isLoading && <TypingIndicator />}
         </View>
 
-        <ChatInput onSendMessage={sendMessage} isLoading={isLoading} />
+        <EnhancedChatInput
+          onSendMessage={sendMessage}
+          onImageSelected={handleImageSelected}
+          onVoiceCallStart={handleVoiceCallStart}
+          isLoading={isLoading}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

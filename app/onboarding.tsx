@@ -146,12 +146,13 @@ export default function OnboardingScreen() {
       const setupInfo: UserSetupInfo = {
         name: userProfile.personal?.name || "",
         email: email,
-        role: userProfile.personal?.role || "",
-        company: userProfile.personal?.company || "",
-        goals: userProfile.goals?.primaryGoals?.[0] || "",
-        challenges: userProfile.workStyle?.challenges?.[0] || "",
         communicationStyle:
-          userProfile.preferences?.communicationStyle || "formal",
+          (userProfile.preferences?.communicationStyle as
+            | "formal"
+            | "casual"
+            | "friendly") || "formal",
+        workPriorities: userProfile.goals?.primaryGoals || [],
+        emailFrequency: "medium" as "high" | "medium" | "low",
       };
 
       setUserSetupInfo(setupInfo);
