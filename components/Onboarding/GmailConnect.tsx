@@ -16,7 +16,7 @@ export const GmailConnect: React.FC<GmailConnectProps> = ({
   onSkip,
   onComplete,
 }) => {
-  const { isConnecting, error, connectGmail } = useGmail();
+  const { isConnecting, error, connectGmail, isGmailConnected, userEmail } = useGmail();
 
   const handleConnect = async () => {
     const success = await connectGmail();
@@ -77,12 +77,21 @@ export const GmailConnect: React.FC<GmailConnectProps> = ({
         </Card>
 
         {error && <Text style={styles.errorText}>{error}</Text>}
+        
+        {isGmailConnected && userEmail && (
+          <Card variant="elevated" style={styles.successCard}>
+            <Text style={styles.successTitle}>✅ Connected Successfully!</Text>
+            <Text style={styles.successText}>
+              Your Gmail account ({userEmail}) is now connected to Anna.
+            </Text>
+          </Card>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
         <GradientButton
-          title="Connect Gmail"
-          onPress={handleConnect}
+          title={isGmailConnected ? "Continue" : "Connect Gmail"}
+          onPress={isGmailConnected ? onComplete : handleConnect}
           isLoading={isConnecting}
           size="large"
           style={styles.connectButton}
@@ -166,6 +175,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.md,
+  },
+  successCard: {
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.md,
+    backgroundColor: colors.success + '10',
+    borderColor: colors.success,
+    borderWidth: 1,
+  },
+  successTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.success,
+    marginBottom: theme.spacing.xs,
+  },
+  successText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   footer: {
     position: "absolute",
