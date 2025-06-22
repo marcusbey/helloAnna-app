@@ -7,6 +7,7 @@ export interface OnboardingQuestion {
   choices?: string[];
   category: 'personal' | 'work' | 'preferences' | 'goals' | 'contact';
   weight: number; // importance level 1-5
+  context?: string; // AI context for generating this question
 }
 
 export interface OnboardingResponse {
@@ -49,156 +50,262 @@ export interface UserProfile {
 class OnboardingAIService {
   private responses: OnboardingResponse[] = [];
   private currentProfile: Partial<UserProfile> = {};
+  private conversationFlow: string[] = []; // Track conversation progression
   
-  private questionTemplates: OnboardingQuestion[] = [
-    {
-      id: 'intro',
-      type: 'open',
-      question: "Hi! I'm Anna, your personal AI assistant. I'm excited to get to know you! Tell me, what should I call you?",
-      category: 'personal',
-      weight: 5
-    },
-    {
-      id: 'role_discovery',
-      type: 'open', 
-      question: "Nice to meet you! What do you do for work? I'd love to understand your role better.",
-      category: 'personal',
-      weight: 4
-    },
-    {
-      id: 'email_pain_points',
-      type: 'choice',
-      question: "What's your biggest challenge with email right now?",
-      choices: [
-        "Too many emails to handle",
-        "Important emails get buried", 
-        "Takes too long to write responses",
-        "Hard to stay organized",
-        "Constant interruptions"
-      ],
-      category: 'work',
-      weight: 5
-    },
-    {
-      id: 'daily_email_volume',
-      type: 'choice',
-      question: "How many emails do you typically receive per day?",
-      choices: [
-        "Less than 20",
-        "20-50 emails", 
-        "50-100 emails",
-        "100-200 emails",
-        "Over 200 emails"
-      ],
-      category: 'work',
-      weight: 4
-    },
-    {
-      id: 'work_goals',
-      type: 'open',
-      question: "What are you hoping to achieve in your work? What would make your days more productive?",
-      category: 'goals',
-      weight: 4
-    },
-    {
-      id: 'communication_style',
-      type: 'choice',
-      question: "How do you prefer to communicate?",
-      choices: [
-        "Direct and to the point",
-        "Friendly and conversational",
-        "Formal and professional", 
-        "Casual and relaxed"
-      ],
-      category: 'preferences',
-      weight: 3
-    },
-    {
-      id: 'automation_comfort',
-      type: 'choice',
-      question: "How comfortable are you with AI helping manage your emails?",
-      choices: [
-        "Handle everything automatically",
-        "Suggest actions, I'll approve",
-        "Only help with organization",
-        "Just provide insights"
-      ],
-      category: 'preferences',
-      weight: 5
-    }
-  ];
+  // Core information we need to collect organically
+  private informationGoals = {
+    name: { collected: false, value: null },
+    role: { collected: false, value: null },
+    company: { collected: false, value: null },
+    email_challenges: { collected: false, value: null },
+    email_volume: { collected: false, value: null },
+    work_goals: { collected: false, value: null },
+    communication_style: { collected: false, value: null },
+    automation_preference: { collected: false, value: null }
+  };
 
-  // Generate the next question based on conversation context
+  // Generate the next question using AI based on conversation context
   async getNextQuestion(conversationHistory: string[]): Promise<OnboardingQuestion | null> {
-    const answeredQuestions = this.responses.map(r => r.questionId);
-    const remainingQuestions = this.questionTemplates.filter(q => 
-      !answeredQuestions.includes(q.id)
-    );
-
-    if (remainingQuestions.length === 0) {
-      return null; // Onboarding complete
+    // Check if this is the very first question
+    if (conversationHistory.length === 0) {
+      return {
+        id: 'intro',
+        type: 'open',
+        question: "Hi! I'm Anna, your personal AI assistant. I'm excited to get to know you! What should I call you?",
+        category: 'personal',
+        weight: 5,
+        context: 'Starting conversation, getting name'
+      };
     }
 
-    // Use AI to determine the most natural next question
-    const context = this.buildConversationContext(conversationHistory);
-    const nextQuestion = await this.selectNextQuestion(remainingQuestions, context);
-    
-    return nextQuestion;
+    // Use AI to generate natural next question
+    const uncollectedInfo = Object.entries(this.informationGoals)
+      .filter(([key, info]) => !info.collected)
+      .map(([key]) => key);
+
+    if (uncollectedInfo.length === 0) {
+      return null; // All information collected
+    }
+
+    // Generate AI-powered question
+    const prompt = `
+You are Anna, a friendly AI assistant conducting a natural onboarding conversation. 
+
+CONVERSATION SO FAR:
+${conversationHistory.join('\n')}
+
+INFORMATION STILL NEEDED (collect organically, don't ask directly):
+${uncollectedInfo.join(', ')}
+
+INSTRUCTIONS:
+1. Generate the next question/response that feels natural in this conversation
+2. Don't ask multiple questions at once
+3. Don't sound like a form or survey
+4. Be warm, personable, and genuinely curious
+5. If offering choices, ALWAYS include "Something else" or "Other" as the last option
+6. Build on what they just said - show you're listening
+7. Focus on ONE piece of information at a time
+
+Return a JSON response:
+{
+  "question": "Your natural question/response here",
+  "type": "open" or "choice",
+  "choices": ["option1", "option2", "Other"] (only if type is "choice"),
+  "target_info": "which information goal this helps collect"
+}
+
+Be conversational, not interrogative!`;
+
+    try {
+      const response = await openaiService.sendMessage(prompt);
+      const aiResponse = JSON.parse(response.message);
+      
+      return {
+        id: `ai_generated_${Date.now()}`,
+        type: aiResponse.type || 'open',
+        question: aiResponse.question,
+        choices: aiResponse.choices,
+        category: this.mapInfoToCategory(aiResponse.target_info),
+        weight: 3,
+        context: aiResponse.target_info
+      };
+    } catch (error) {
+      console.error('Error generating AI question:', error);
+      
+      // Fallback to simple questions if AI fails
+      return this.getFallbackQuestion(uncollectedInfo[0]);
+    }
   }
 
-  // Record user response and update profile
+  // Record user response and extract information organically using AI
   async recordResponse(questionId: string, answer: string): Promise<void> {
     const response: OnboardingResponse = {
       questionId,
       answer,
       timestamp: new Date(),
-      category: this.questionTemplates.find(q => q.id === questionId)?.category || 'unknown'
+      category: 'unknown'
     };
 
     this.responses.push(response);
-    await this.updateUserProfile(response);
+    this.conversationFlow.push(`User: ${answer}`);
+    
+    // Use AI to extract structured information from the user's natural response
+    await this.extractInformationFromResponse(answer);
   }
 
-  // Generate personalized follow-up questions based on answers
-  async generateFollowUpQuestion(previousAnswer: string, context: string): Promise<OnboardingQuestion | null> {
+  // Use AI to extract structured information from user responses
+  private async extractInformationFromResponse(userResponse: string): Promise<void> {
+    const prompt = `
+Extract structured information from this user response: "${userResponse}"
+
+Based on the conversation context, identify any of these pieces of information:
+- name: What should we call them?
+- role: Their job title or role
+- company: Company name or type of business
+- email_challenges: Email problems they mentioned
+- email_volume: How many emails they handle
+- work_goals: Professional goals or what they want to achieve
+- communication_style: How they prefer to communicate
+- automation_preference: How much AI help they want
+
+Return ONLY a JSON object with the information found. If nothing is found, return {}.
+
+Example: {"name": "Marcus", "role": "startup founder"}
+
+JSON:`;
+
     try {
-      const prompt = `
-Based on this user's answer: "${previousAnswer}"
-And our conversation context: "${context}"
-
-Generate a natural follow-up question to learn more about them personally or professionally. 
-The question should feel like a genuine conversation, not an interview.
-Keep it friendly and engaging.
-
-Return only the question text, nothing else.
-`;
-
       const response = await openaiService.sendMessage(prompt);
+      const extractedInfo = JSON.parse(response.message);
       
-      if (response) {
-        return {
-          id: `follow_up_${Date.now()}`,
-          type: 'follow_up',
-          question: response,
-          category: 'personal',
-          weight: 2
-        };
-      }
+      // Update our information goals
+      Object.entries(extractedInfo).forEach(([key, value]) => {
+        if (this.informationGoals[key] && value) {
+          this.informationGoals[key].collected = true;
+          this.informationGoals[key].value = value;
+          console.log(`✅ Collected ${key}: ${value}`);
+        }
+      });
+
+      // Update user profile with extracted information
+      await this.updateProfileFromExtractedInfo(extractedInfo);
+      
     } catch (error) {
-      console.error('Error generating follow-up question:', error);
+      console.error('Error extracting information:', error);
+    }
+  }
+
+  // Helper methods
+  private mapInfoToCategory(targetInfo: string): string {
+    const categoryMap = {
+      'name': 'personal',
+      'role': 'personal', 
+      'company': 'personal',
+      'email_challenges': 'work',
+      'email_volume': 'work',
+      'work_goals': 'goals',
+      'communication_style': 'preferences',
+      'automation_preference': 'preferences'
+    };
+    return categoryMap[targetInfo] || 'personal';
+  }
+
+  private getFallbackQuestion(targetInfo: string): OnboardingQuestion {
+    const fallbackQuestions = {
+      'name': "What should I call you?",
+      'role': "What do you do for work?", 
+      'company': "Tell me about where you work!",
+      'email_challenges': "What's the biggest challenge you face with email?",
+      'email_volume': "How many emails do you typically get per day?",
+      'work_goals': "What are you hoping to achieve in your work?",
+      'communication_style': "How do you like to communicate with people?",
+      'automation_preference': "How comfortable are you with AI helping you with tasks?"
+    };
+
+    return {
+      id: `fallback_${targetInfo}`,
+      type: 'open',
+      question: fallbackQuestions[targetInfo] || "Tell me more about yourself!",
+      category: this.mapInfoToCategory(targetInfo),
+      weight: 3,
+      context: `Fallback question for ${targetInfo}`
+    };
+  }
+
+  private async updateProfileFromExtractedInfo(extractedInfo: any): Promise<void> {
+    // Update the user profile structure with extracted information
+    if (extractedInfo.name) {
+      this.currentProfile.personal = { 
+        ...this.currentProfile.personal, 
+        name: extractedInfo.name 
+      };
     }
     
-    return null;
+    if (extractedInfo.role) {
+      this.currentProfile.personal = { 
+        ...this.currentProfile.personal, 
+        role: extractedInfo.role 
+      };
+    }
+    
+    if (extractedInfo.company) {
+      this.currentProfile.personal = { 
+        ...this.currentProfile.personal, 
+        company: extractedInfo.company 
+      };
+    }
+    
+    if (extractedInfo.email_challenges) {
+      this.currentProfile.workStyle = {
+        ...this.currentProfile.workStyle,
+        challenges: [extractedInfo.email_challenges]
+      };
+    }
+    
+    if (extractedInfo.email_volume) {
+      this.currentProfile.workStyle = {
+        ...this.currentProfile.workStyle,
+        emailVolume: extractedInfo.email_volume
+      };
+    }
+    
+    if (extractedInfo.work_goals) {
+      this.currentProfile.goals = {
+        ...this.currentProfile.goals,
+        primaryGoals: [extractedInfo.work_goals]
+      };
+    }
+    
+    if (extractedInfo.communication_style) {
+      this.currentProfile.preferences = {
+        ...this.currentProfile.preferences,
+        communicationStyle: extractedInfo.communication_style
+      };
+    }
+    
+    if (extractedInfo.automation_preference) {
+      this.currentProfile.preferences = {
+        ...this.currentProfile.preferences,
+        automationLevel: extractedInfo.automation_preference
+      };
+    }
   }
 
-  // Check if onboarding is complete (but don't ask for email here)
+  // Check if onboarding is complete based on collected information
   isOnboardingComplete(): boolean {
-    const essentialQuestions = this.questionTemplates.filter(q => q.weight >= 4);
-    const answeredEssential = essentialQuestions.filter(q => 
-      this.responses.some(r => r.questionId === q.id)
+    const essentialInfo = ['name', 'role', 'email_challenges', 'automation_preference'];
+    const collectedEssentialInfo = essentialInfo.filter(info => 
+      this.informationGoals[info]?.collected
     );
     
-    return answeredEssential.length >= essentialQuestions.length * 0.8; // 80% of essential questions
+    // Need at least 75% of essential information
+    const completionThreshold = 0.75;
+    const isComplete = collectedEssentialInfo.length >= essentialInfo.length * completionThreshold;
+    
+    console.log(`📊 Onboarding progress: ${collectedEssentialInfo.length}/${essentialInfo.length} essential info collected`);
+    console.log(`✅ Collected: ${collectedEssentialInfo.join(', ')}`);
+    
+    return isComplete;
   }
 
   // Get current user profile

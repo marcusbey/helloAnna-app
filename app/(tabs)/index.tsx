@@ -1,4 +1,4 @@
-import { ChatScreen } from "@/components/Chat/ChatScreen";
+import { EnhancedChatScreen } from "@/components/Chat/EnhancedChatScreen";
 import { Stack } from "expo-router";
 
 export default function ChatTab() {
@@ -6,13 +6,10 @@ export default function ChatTab() {
     <>
       <Stack.Screen
         options={{
-          title: "Anna",
-          headerTitleStyle: {
-            fontWeight: "bold",
-          },
+          headerShown: false,
         }}
       />
-      <ChatScreen />
+      <EnhancedChatScreen />
     </>
   );
 }

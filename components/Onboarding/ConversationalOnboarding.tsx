@@ -129,25 +129,8 @@ export default function ConversationalOnboarding({
     // Record the response
     await onboardingAI.recordResponse(currentQuestion.id, userAnswer);
 
-    // Check if we need a follow-up or next question
+    // Build conversation history for AI context
     const conversationHistory = messages.map((m) => `${m.type}: ${m.content}`);
-
-    // Randomly decide to ask a follow-up (30% chance) to make conversation natural
-    const shouldFollowUp =
-      Math.random() < 0.3 && currentQuestion.type === "open";
-
-    if (shouldFollowUp) {
-      const followUp = await onboardingAI.generateFollowUpQuestion(
-        userAnswer,
-        conversationHistory.join("\n")
-      );
-
-      if (followUp) {
-        setCurrentQuestion(followUp);
-        addAnnaMessage(followUp.question);
-        return;
-      }
-    }
 
     // Check if onboarding is complete
     if (onboardingAI.isOnboardingComplete()) {
@@ -285,8 +268,7 @@ export default function ConversationalOnboarding({
         <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
           <Text style={styles.headerTitle}>Getting to Know You</Text>
           <Text style={styles.headerSubtitle}>
-            Hi! I'm Anna, your personal AI assistant. I'm excited to get to know
-            you! Tell me, what should I call you?
+            Let's have a natural conversation! Anna wants to understand how she can best help you.
           </Text>
         </LinearGradient>
 

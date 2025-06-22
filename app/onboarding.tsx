@@ -45,7 +45,7 @@ export default function OnboardingScreen() {
       // Also clear the AsyncStorage manually
       import("@react-native-async-storage/async-storage").then(
         (AsyncStorage) => {
-          AsyncStorage.removeItem("anna-storage");
+          AsyncStorage.default.removeItem("anna-storage");
         }
       );
       return;
@@ -151,7 +151,7 @@ export default function OnboardingScreen() {
         goals: userProfile.goals?.primaryGoals?.[0] || "",
         challenges: userProfile.workStyle?.challenges?.[0] || "",
         communicationStyle:
-          userProfile.preferences?.communicationStyle || "professional",
+          userProfile.preferences?.communicationStyle || "formal",
       };
 
       setUserSetupInfo(setupInfo);
@@ -229,11 +229,7 @@ export default function OnboardingScreen() {
   const renderCurrentStep = () => {
     console.log("🎯 Current onboarding step:", onboardingStep);
 
-    // Emergency reset function (for debugging)
-    if (onboardingStep === "emergency-reset") {
-      resetOnboarding();
-      return null;
-    }
+    // Note: Emergency reset removed - no longer needed
 
     switch (onboardingStep) {
       // Initial Welcome/Authentication Screen
