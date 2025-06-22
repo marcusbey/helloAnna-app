@@ -57,8 +57,6 @@ const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
 const requiredDeps = [
   'openai',
-  'googleapis',
-  'google-auth-library',
   'expo-secure-store',
   'expo-web-browser'
 ];
@@ -127,8 +125,8 @@ if (!openaiFile.includes('import OpenAI from \'openai\'')) {
   process.exit(1);
 }
 
-if (!gmailFile.includes('import { OAuth2Client }')) {
-  console.error('❌ Google OAuth import not found in lib/gmail.ts');
+if (!gmailFile.includes('import * as SecureStore')) {
+  console.error('❌ SecureStore import not found in lib/gmail.ts');
   process.exit(1);
 }
 

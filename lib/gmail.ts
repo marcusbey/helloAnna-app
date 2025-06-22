@@ -1,5 +1,3 @@
-import { OAuth2Client } from 'google-auth-library';
-import { gmail_v1, google } from 'googleapis';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
@@ -39,9 +37,8 @@ export interface EmailStats {
 }
 
 class GmailService {
-  private oauth2Client: OAuth2Client | null = null;
-  private gmail: gmail_v1.Gmail | null = null;
   private config: GmailConfig;
+  private accessToken: string | null = null;
 
   constructor() {
     this.config = {
@@ -49,46 +46,51 @@ class GmailService {
       clientSecret: process.env.GMAIL_CLIENT_SECRET || '',
       redirectUri: Constants.expoConfig?.extra?.EXPO_PUBLIC_GMAIL_REDIRECT_URI || process.env.EXPO_PUBLIC_GMAIL_REDIRECT_URI || 'http://localhost:8081/auth/callback'
     };
-
-    this.initializeOAuth();
   }
 
-  private initializeOAuth() {
-    if (!this.config.clientId || !this.config.clientSecret) {
-      console.warn('Gmail OAuth credentials not configured');
-      return;
+  private async makeGmailRequest(endpoint: string, options: RequestInit = {}) {
+    if (!this.accessToken) {
+      throw new Error('Not authenticated with Gmail');
     }
 
-    this.oauth2Client = new OAuth2Client({
-      clientId: this.config.clientId,
-      clientSecret: this.config.clientSecret,
-      redirectUri: this.config.redirectUri,
+    const response = await fetch(`https://gmail.googleapis.com/gmail/v1${endpoint}`, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
     });
 
-    this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
+    if (!response.ok) {
+      throw new Error(`Gmail API error: ${response.status}`);
+    }
+
+    return response.json();
   }
 
   // Check if user is authenticated
   async isAuthenticated(): Promise<boolean> {
     try {
       const tokens = await this.getStoredTokens();
-      if (!tokens) return false;
+      if (!tokens || !tokens.access_token) return false;
 
-      this.oauth2Client?.setCredentials(tokens);
+      this.accessToken = tokens.access_token;
       
       // Try to make a simple API call to verify tokens
-      await this.gmail?.users.getProfile({ userId: 'me' });
+      await this.makeGmailRequest('/users/me/profile');
       return true;
     } catch (error) {
       console.error('Gmail authentication check failed:', error);
+      this.accessToken = null;
       return false;
     }
   }
 
   // Get OAuth URL for authentication
   getAuthUrl(): string {
-    if (!this.oauth2Client) {
-      throw new Error('Gmail OAuth not initialized. Check your configuration.');
+    if (!this.config.clientId) {
+      throw new Error('Gmail OAuth not configured. Check your configuration.');
     }
 
     const scopes = [
@@ -97,28 +99,51 @@ class GmailService {
       'https://www.googleapis.com/auth/gmail.modify',
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile'
-    ];
+    ].join(' ');
 
-    return this.oauth2Client.generateAuthUrl({
-      access_type: 'offline',
+    const params = new URLSearchParams({
+      client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
       scope: scopes,
+      response_type: 'code',
+      access_type: 'offline',
       prompt: 'consent'
     });
+
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
   // Handle OAuth callback and exchange code for tokens
   async handleAuthCallback(code: string): Promise<GmailTokens> {
-    if (!this.oauth2Client) {
-      throw new Error('Gmail OAuth not initialized');
+    if (!this.config.clientId || !this.config.clientSecret) {
+      throw new Error('Gmail OAuth not configured');
     }
 
     try {
-      const { tokens } = await this.oauth2Client.getToken(code);
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: this.config.clientId,
+          client_secret: this.config.clientSecret,
+          code,
+          grant_type: 'authorization_code',
+          redirect_uri: this.config.redirectUri,
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error(`Token exchange failed: ${tokenResponse.status}`);
+      }
+
+      const tokens = await tokenResponse.json();
       
       const gmailTokens: GmailTokens = {
         access_token: tokens.access_token || '',
         refresh_token: tokens.refresh_token,
-        expiry_date: tokens.expiry_date,
+        expiry_date: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : undefined,
         token_type: tokens.token_type || 'Bearer',
         scope: tokens.scope || ''
       };
@@ -126,8 +151,8 @@ class GmailService {
       // Store tokens securely
       await this.storeTokens(gmailTokens);
       
-      // Set credentials for future requests
-      this.oauth2Client.setCredentials(tokens);
+      // Set access token for future requests
+      this.accessToken = gmailTokens.access_token;
 
       return gmailTokens;
     } catch (error) {
@@ -167,7 +192,7 @@ class GmailService {
   async disconnect(): Promise<void> {
     try {
       await SecureStore.deleteItemAsync('gmail_tokens');
-      this.oauth2Client?.setCredentials({});
+      this.accessToken = null;
       console.log('Gmail disconnected successfully');
     } catch (error) {
       console.error('Error disconnecting Gmail:', error);
@@ -181,8 +206,8 @@ class GmailService {
         throw new Error('Not authenticated with Gmail');
       }
 
-      const response = await this.gmail?.users.getProfile({ userId: 'me' });
-      return response?.data.emailAddress || '';
+      const response = await this.makeGmailRequest('/users/me/profile');
+      return response.emailAddress || '';
     } catch (error) {
       console.error('Error getting user email:', error);
       throw new Error('Failed to get user email');
@@ -197,38 +222,23 @@ class GmailService {
       }
 
       // Get total messages
-      const totalResponse = await this.gmail?.users.messages.list({
-        userId: 'me',
-        maxResults: 1
-      });
+      const totalResponse = await this.makeGmailRequest('/users/me/messages?maxResults=1');
 
       // Get unread messages
-      const unreadResponse = await this.gmail?.users.messages.list({
-        userId: 'me',
-        q: 'is:unread',
-        maxResults: 500
-      });
+      const unreadResponse = await this.makeGmailRequest('/users/me/messages?q=is:unread&maxResults=500');
 
       // Get today's messages
       const today = new Date().toISOString().split('T')[0];
-      const todayResponse = await this.gmail?.users.messages.list({
-        userId: 'me',
-        q: `after:${today}`,
-        maxResults: 500
-      });
+      const todayResponse = await this.makeGmailRequest(`/users/me/messages?q=after:${today}&maxResults=500`);
 
       // Get important messages
-      const importantResponse = await this.gmail?.users.messages.list({
-        userId: 'me',
-        q: 'is:important is:unread',
-        maxResults: 100
-      });
+      const importantResponse = await this.makeGmailRequest('/users/me/messages?q=is:important%20is:unread&maxResults=100');
 
       return {
-        totalEmails: totalResponse?.data.resultSizeEstimate || 0,
-        unreadCount: unreadResponse?.data.resultSizeEstimate || 0,
-        todayCount: todayResponse?.data.resultSizeEstimate || 0,
-        importantCount: importantResponse?.data.resultSizeEstimate || 0
+        totalEmails: totalResponse?.resultSizeEstimate || 0,
+        unreadCount: unreadResponse?.resultSizeEstimate || 0,
+        todayCount: todayResponse?.resultSizeEstimate || 0,
+        importantCount: importantResponse?.resultSizeEstimate || 0
       };
     } catch (error) {
       console.error('Error getting email stats:', error);
@@ -243,26 +253,17 @@ class GmailService {
         throw new Error('Not authenticated with Gmail');
       }
 
-      const response = await this.gmail?.users.messages.list({
-        userId: 'me',
-        maxResults,
-        q: 'in:inbox'
-      });
-
-      const messages = response?.data.messages || [];
+      const response = await this.makeGmailRequest(`/users/me/messages?maxResults=${maxResults}&q=in:inbox`);
+      const messages = response?.messages || [];
       const emails: EmailMessage[] = [];
 
       // Get detailed info for each message
       for (const message of messages.slice(0, maxResults)) {
         if (message.id) {
-          const details = await this.gmail?.users.messages.get({
-            userId: 'me',
-            id: message.id,
-            format: 'full'
-          });
-
-          if (details?.data) {
-            const email = this.parseEmailMessage(details.data);
+          const details = await this.makeGmailRequest(`/users/me/messages/${message.id}?format=full`);
+          
+          if (details) {
+            const email = this.parseEmailMessage(details);
             if (email) emails.push(email);
           }
         }
@@ -292,13 +293,13 @@ class GmailService {
         body
       ].join('\n');
 
-      const encodedEmail = Buffer.from(email).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
+      const encodedEmail = btoa(email).replace(/\+/g, '-').replace(/\//g, '_');
 
-      await this.gmail?.users.messages.send({
-        userId: 'me',
-        requestBody: {
+      await this.makeGmailRequest('/users/me/messages/send', {
+        method: 'POST',
+        body: JSON.stringify({
           raw: encodedEmail
-        }
+        })
       });
 
       console.log('Email sent successfully');
@@ -328,25 +329,25 @@ class GmailService {
     }
   }
 
-  private parseEmailMessage(messageData: gmail_v1.Schema$Message): EmailMessage | null {
+  private parseEmailMessage(messageData: any): EmailMessage | null {
     try {
       const headers = messageData.payload?.headers || [];
-      const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
-      const from = headers.find(h => h.name === 'From')?.value || 'Unknown Sender';
-      const to = headers.find(h => h.name === 'To')?.value?.split(',') || [];
-      const date = headers.find(h => h.name === 'Date')?.value || '';
+      const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'No Subject';
+      const from = headers.find((h: any) => h.name === 'From')?.value || 'Unknown Sender';
+      const to = headers.find((h: any) => h.name === 'To')?.value?.split(',') || [];
+      const date = headers.find((h: any) => h.name === 'Date')?.value || '';
 
       // Extract body (simplified - could be enhanced for HTML/multipart)
       let body = '';
       if (messageData.payload?.body?.data) {
-        body = Buffer.from(messageData.payload.body.data, 'base64').toString();
+        body = atob(messageData.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
       } else if (messageData.payload?.parts) {
         // Handle multipart messages
-        const textPart = messageData.payload.parts.find(part => 
+        const textPart = messageData.payload.parts.find((part: any) => 
           part.mimeType === 'text/plain' && part.body?.data
         );
         if (textPart?.body?.data) {
-          body = Buffer.from(textPart.body.data, 'base64').toString();
+          body = atob(textPart.body.data.replace(/-/g, '+').replace(/_/g, '/'));
         }
       }
 

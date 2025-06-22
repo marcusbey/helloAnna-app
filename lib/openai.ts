@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import Constants from 'expo-constants';
+import { onboardingStorage } from './onboarding-storage';
 
 const openai = new OpenAI({
   apiKey: Constants.expoConfig?.extra?.EXPO_PUBLIC_OPENAI_API_KEY || process.env.EXPO_PUBLIC_OPENAI_API_KEY,
@@ -56,13 +57,37 @@ export class OpenAIService {
         timestamp: Date.now()
       });
 
+      // Get user's onboarding insights for personalized responses
+      const insights = await onboardingStorage.getOnboardingInsights();
+      
+      // Prepare messages for OpenAI
+      let messages = this.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      // Add personalized context if we have onboarding data
+      if (insights && this.messages.length <= 4) { // Only for first few messages
+        const personalizedPrompt = `${EMMA_SYSTEM_PROMPT}
+
+User Context (use this to personalize your responses):
+- Communication style: ${insights.communicationStyle}
+- Primary challenges: ${insights.primaryChallenges.join(', ')}
+- Preferred automation: ${insights.preferredAutomation}
+- Work context: ${insights.workContext}
+
+Adapt your responses to match their communication style and address their specific challenges.`;
+
+        messages[0] = {
+          role: 'system',
+          content: personalizedPrompt
+        };
+      }
+
       // Send to OpenAI
       const completion = await openai.chat.completions.create({
         model: process.env.EXPO_PUBLIC_AI_MODEL || 'gpt-4o-mini',
-        messages: this.messages.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        })),
+        messages: messages,
         temperature: 0.7,
         max_tokens: 1000,
       });

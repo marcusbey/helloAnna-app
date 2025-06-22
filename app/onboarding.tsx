@@ -13,10 +13,13 @@ import {
   AnnaSetupScreen,
   UserSetupInfo,
 } from "@/components/Onboarding/AnnaSetupScreen";
+import ConversationalOnboarding from "@/components/Onboarding/ConversationalOnboarding";
 import { AudienceGrowthScreen } from "@/components/Onboarding/AudienceGrowthScreen";
 import { BackgroundTasksScreen } from "@/components/Onboarding/BackgroundTasksScreen";
 import { SocialMediaScreen } from "@/components/Onboarding/SocialMediaScreen";
 import { WelcomeScreen } from "@/components/Onboarding/WelcomeScreen";
+import { onboardingStorage } from "@/lib/onboarding-storage";
+import { UserProfile } from "@/lib/onboarding-ai";
 
 export default function OnboardingScreen() {
   const {
@@ -28,9 +31,8 @@ export default function OnboardingScreen() {
     setAuthenticated,
   } = useAppStore();
 
-  const [userSetupInfo, setUserSetupInfo] = useState<UserSetupInfo | null>(
-    null
-  );
+  const [userSetupInfo, setUserSetupInfo] = useState<UserSetupInfo | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // Anna Intro Screen handlers
   const handleAnnaIntroStart = () => {
@@ -91,18 +93,40 @@ export default function OnboardingScreen() {
     setOnboardingStep("conversation-name");
   };
 
-  // Conversation handlers
-  const handleConversationComplete = (userInfo: UserSetupInfo) => {
-    setUserSetupInfo(userInfo);
+  // Conversation handlers - for conversational onboarding phase
+  const handleConversationComplete = async (profile: UserProfile) => {
+    setUserProfile(profile);
+    
+    // Save to database
+    try {
+      await onboardingStorage.saveOnboardingProfile(profile);
+      console.log('Profile saved successfully');
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+    }
+    
     setOnboardingStep("signup");
   };
 
   // Signup handlers
   const handleSignupComplete = (email?: string) => {
-    if (userSetupInfo && email) {
+    if (userProfile && email) {
+      // Create user setup info from profile
+      const setupInfo: UserSetupInfo = {
+        name: userProfile.personal?.name || '',
+        email: email,
+        role: userProfile.personal?.role || '',
+        company: userProfile.personal?.company || '',
+        goals: userProfile.goals?.primaryGoals?.[0] || '',
+        challenges: userProfile.workStyle?.challenges?.[0] || '',
+        communicationStyle: userProfile.preferences?.communicationStyle || 'professional'
+      };
+      
+      setUserSetupInfo(setupInfo);
+      
       setUser({
         id: "1",
-        name: userSetupInfo.name,
+        name: setupInfo.name,
         email: email,
         isGmailConnected: false,
         preferences: {
@@ -124,7 +148,7 @@ export default function OnboardingScreen() {
     completeOnboarding(true);
   };
 
-  const completeOnboarding = (isGmailConnected: boolean) => {
+  const completeOnboarding = async (isGmailConnected: boolean) => {
     if (userSetupInfo) {
       setUser({
         id: "1",
@@ -137,6 +161,21 @@ export default function OnboardingScreen() {
           darkMode: false,
         },
       });
+
+      // Update stored profile with Gmail connection status
+      if (userProfile) {
+        try {
+          await onboardingStorage.saveOnboardingProfile({
+            ...userProfile,
+            contact: { 
+              ...userProfile.contact, 
+              email: userSetupInfo.email 
+            }
+          });
+        } catch (error) {
+          console.error('Failed to update profile with Gmail status:', error);
+        }
+      }
     }
 
     setOnboardingStep("dashboard-intro");
@@ -184,9 +223,9 @@ export default function OnboardingScreen() {
       case "conversation-challenge":
       case "conversation-style":
       case "conversation-goals":
-        return <AnnaSetupScreen onComplete={handleConversationComplete} />;
+        return <ConversationalOnboarding onComplete={handleConversationComplete} />;
 
-      // Account Creation
+      // Account Creation (Signup Wall)
       case "signup":
       case "email-input":
         return (

@@ -41,6 +41,24 @@ CREATE TABLE user_external_accounts (
   UNIQUE(user_id, provider)
 );
 
+-- User onboarding data (conversational profile)
+CREATE TABLE user_onboarding_profiles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+  personal_data JSONB DEFAULT '{}', -- name, role, company, industry, experience
+  work_style JSONB DEFAULT '{}', -- emailVolume, busyHours, priorities, challenges
+  preferences JSONB DEFAULT '{}', -- communicationStyle, notificationPreference, automationLevel
+  goals JSONB DEFAULT '{}', -- primaryGoals, timeExpectations, successMetrics
+  conversation_history JSONB DEFAULT '[]', -- full onboarding conversation
+  profile_completeness INTEGER DEFAULT 0, -- percentage complete (0-100)
+  onboarding_completed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Ensure one onboarding profile per user
+  UNIQUE(user_id)
+);
+
 -- User preferences and settings
 CREATE TABLE user_preferences (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -72,12 +90,14 @@ CREATE TABLE user_email_sync (
 CREATE INDEX idx_user_profiles_clerk_id ON user_profiles(clerk_user_id);
 CREATE INDEX idx_user_external_accounts_user_id ON user_external_accounts(user_id);
 CREATE INDEX idx_user_external_accounts_provider ON user_external_accounts(provider);
+CREATE INDEX idx_user_onboarding_profiles_user_id ON user_onboarding_profiles(user_id);
 CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
 CREATE INDEX idx_user_email_sync_user_id ON user_email_sync(user_id);
 
 -- Row Level Security (RLS) policies
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_external_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_onboarding_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_email_sync ENABLE ROW LEVEL SECURITY;
 
@@ -89,6 +109,13 @@ CREATE POLICY "Users can update own profile" ON user_profiles
   FOR UPDATE USING (clerk_user_id = auth.jwt() ->> 'sub');
 
 CREATE POLICY "Users can view own external accounts" ON user_external_accounts
+  FOR ALL USING (
+    user_id IN (
+      SELECT id FROM user_profiles WHERE clerk_user_id = auth.jwt() ->> 'sub'
+    )
+  );
+
+CREATE POLICY "Users can view own onboarding profile" ON user_onboarding_profiles
   FOR ALL USING (
     user_id IN (
       SELECT id FROM user_profiles WHERE clerk_user_id = auth.jwt() ->> 'sub'
@@ -123,6 +150,9 @@ CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_user_external_accounts_updated_at BEFORE UPDATE ON user_external_accounts
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_onboarding_profiles_updated_at BEFORE UPDATE ON user_onboarding_profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences
