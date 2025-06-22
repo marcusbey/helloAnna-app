@@ -1,13 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, ScrollView, Text, TouchableOpacity, TextInput, Alert } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Mic, Send, User } from 'lucide-react-native';
-import { onboardingAI, OnboardingQuestion } from '../../lib/onboarding-ai';
-import { useVoice } from '../../hooks/useVoice';
+import { LinearGradient } from "expo-linear-gradient";
+import { Mic, Send, User } from "lucide-react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useVoice } from "../../hooks/useVoice";
+import { onboardingAI, OnboardingQuestion } from "../../lib/onboarding-ai";
 
 interface Message {
   id: string;
-  type: 'anna' | 'user';
+  type: "anna" | "user";
   content: string;
   timestamp: Date;
   choices?: string[];
@@ -17,13 +28,17 @@ interface ConversationalOnboardingProps {
   onComplete: (userProfile: any) => void;
 }
 
-export default function ConversationalOnboarding({ onComplete }: ConversationalOnboardingProps) {
+export default function ConversationalOnboarding({
+  onComplete,
+}: ConversationalOnboardingProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [currentInput, setCurrentInput] = useState('');
+  const [currentInput, setCurrentInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState<OnboardingQuestion | null>(null);
+  const [currentQuestion, setCurrentQuestion] =
+    useState<OnboardingQuestion | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
-  
+  const typingAnimation = useRef(new Animated.Value(0)).current;
+
   const { isRecording, startRecording, stopRecording, transcript } = useVoice();
 
   useEffect(() => {
@@ -45,6 +60,28 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
     }, 100);
   }, [messages]);
 
+  useEffect(() => {
+    // Animate typing indicator
+    if (isTyping) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(typingAnimation, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(typingAnimation, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      typingAnimation.setValue(0);
+    }
+  }, [isTyping]);
+
   const startOnboarding = async () => {
     const firstQuestion = await onboardingAI.getNextQuestion([]);
     if (firstQuestion) {
@@ -55,18 +92,18 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
 
   const addAnnaMessage = (content: string, choices?: string[]) => {
     setIsTyping(true);
-    
+
     // Simulate Anna typing for realism
     setTimeout(() => {
       const message: Message = {
         id: Date.now().toString(),
-        type: 'anna',
+        type: "anna",
         content,
         timestamp: new Date(),
-        choices
+        choices,
       };
-      
-      setMessages(prev => [...prev, message]);
+
+      setMessages((prev) => [...prev, message]);
       setIsTyping(false);
     }, 1000 + Math.random() * 1000); // 1-2 second delay
   };
@@ -74,12 +111,12 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
   const addUserMessage = (content: string) => {
     const message: Message = {
       id: Date.now().toString(),
-      type: 'user',
+      type: "user",
       content,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
-    
-    setMessages(prev => [...prev, message]);
+
+    setMessages((prev) => [...prev, message]);
   };
 
   const handleSendMessage = async () => {
@@ -87,23 +124,24 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
 
     const userAnswer = currentInput.trim();
     addUserMessage(userAnswer);
-    setCurrentInput('');
+    setCurrentInput("");
 
     // Record the response
     await onboardingAI.recordResponse(currentQuestion.id, userAnswer);
 
     // Check if we need a follow-up or next question
-    const conversationHistory = messages.map(m => `${m.type}: ${m.content}`);
-    
+    const conversationHistory = messages.map((m) => `${m.type}: ${m.content}`);
+
     // Randomly decide to ask a follow-up (30% chance) to make conversation natural
-    const shouldFollowUp = Math.random() < 0.3 && currentQuestion.type === 'open';
-    
+    const shouldFollowUp =
+      Math.random() < 0.3 && currentQuestion.type === "open";
+
     if (shouldFollowUp) {
       const followUp = await onboardingAI.generateFollowUpQuestion(
-        userAnswer, 
-        conversationHistory.join('\n')
+        userAnswer,
+        conversationHistory.join("\n")
       );
-      
+
       if (followUp) {
         setCurrentQuestion(followUp);
         addAnnaMessage(followUp.question);
@@ -116,7 +154,7 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
       // Complete onboarding with final message
       const completionMessage = onboardingAI.generateCompletionMessage();
       addAnnaMessage(completionMessage);
-      
+
       // Complete onboarding after a short delay
       setTimeout(() => {
         const userProfile = onboardingAI.getUserProfile();
@@ -126,7 +164,9 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
     }
 
     // Get next question
-    const nextQuestion = await onboardingAI.getNextQuestion(conversationHistory);
+    const nextQuestion = await onboardingAI.getNextQuestion(
+      conversationHistory
+    );
     if (nextQuestion) {
       setCurrentQuestion(nextQuestion);
       addAnnaMessage(nextQuestion.question, nextQuestion.choices);
@@ -138,7 +178,6 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
   };
 
   const handleChoiceSelect = async (choice: string) => {
-    await handleSendMessage();
     setCurrentInput(choice);
     setTimeout(() => handleSendMessage(), 100);
   };
@@ -152,47 +191,58 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
   };
 
   const renderMessage = (message: Message) => {
-    const isAnna = message.type === 'anna';
-    
+    const isAnna = message.type === "anna";
+
     return (
-      <View key={message.id} className={`mb-4 ${isAnna ? 'mr-8' : 'ml-8'}`}>
-        <View className={`flex-row ${isAnna ? 'justify-start' : 'justify-end'}`}>
+      <View
+        key={message.id}
+        style={[
+          styles.messageContainer,
+          isAnna ? styles.annaMessageContainer : styles.userMessageContainer,
+        ]}
+      >
+        <View style={styles.messageRow}>
           {isAnna && (
-            <View className="w-10 h-10 rounded-full bg-blue-500 mr-3 items-center justify-center">
-              <Text className="text-white font-bold text-lg">A</Text>
+            <View style={styles.annaAvatar}>
+              <Text style={styles.annaAvatarText}>A</Text>
             </View>
           )}
-          
-          <View className={`max-w-[80%] p-4 rounded-2xl ${
-            isAnna 
-              ? 'bg-gray-100 rounded-bl-sm' 
-              : 'bg-blue-500 rounded-br-sm'
-          }`}>
-            <Text className={`text-base ${isAnna ? 'text-gray-800' : 'text-white'}`}>
+
+          <View
+            style={[
+              styles.messageBubble,
+              isAnna ? styles.annaBubble : styles.userBubble,
+              isAnna ? { marginLeft: 8 } : { marginRight: 8 },
+            ]}
+          >
+            <Text
+              style={[
+                styles.messageText,
+                isAnna ? styles.annaMessageText : styles.userMessageText,
+              ]}
+            >
               {message.content}
             </Text>
-            
+
             {/* Render choice buttons for Anna's messages */}
             {isAnna && message.choices && (
-              <View className="mt-3 space-y-2">
+              <View style={styles.choicesContainer}>
                 {message.choices.map((choice, index) => (
                   <TouchableOpacity
                     key={index}
                     onPress={() => handleChoiceSelect(choice)}
-                    className="bg-white border border-gray-300 rounded-lg p-3"
+                    style={styles.choiceButton}
                   >
-                    <Text className="text-blue-600 text-center font-medium">
-                      {choice}
-                    </Text>
+                    <Text style={styles.choiceButtonText}>{choice}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             )}
           </View>
-          
+
           {!isAnna && (
-            <View className="w-10 h-10 rounded-full bg-gray-300 ml-3 items-center justify-center">
-              <User size={20} color="#666" />
+            <View style={styles.userAvatar}>
+              <User size={16} color="#666" />
             </View>
           )}
         </View>
@@ -200,87 +250,280 @@ export default function ConversationalOnboarding({ onComplete }: ConversationalO
     );
   };
 
-  return (
-    <LinearGradient
-      colors={['#667eea', '#764ba2']}
-      className="flex-1"
-    >
-      <View className="flex-1 pt-16 pb-8">
-        {/* Header */}
-        <View className="px-6 mb-6">
-          <Text className="text-white text-2xl font-bold">Getting to Know You</Text>
-          <Text className="text-white/80 text-base mt-1">
-            Let's have a conversation! Anna wants to understand how she can best help you.
-          </Text>
+  const renderTypingIndicator = () => (
+    <View style={styles.typingContainer}>
+      <View style={styles.messageRow}>
+        <View style={styles.annaAvatar}>
+          <Text style={styles.annaAvatarText}>A</Text>
         </View>
+        <View
+          style={[styles.messageBubble, styles.annaBubble, { marginLeft: 8 }]}
+        >
+          <View style={styles.typingDots}>
+            <Animated.View
+              style={[styles.typingDot, { opacity: typingAnimation }]}
+            />
+            <Animated.View
+              style={[styles.typingDot, { opacity: typingAnimation }]}
+            />
+            <Animated.View
+              style={[styles.typingDot, { opacity: typingAnimation }]}
+            />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
+        {/* Header */}
+        <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
+          <Text style={styles.headerTitle}>Getting to Know You</Text>
+          <Text style={styles.headerSubtitle}>
+            Hi! I'm Anna, your personal AI assistant. I'm excited to get to know
+            you! Tell me, what should I call you?
+          </Text>
+        </LinearGradient>
 
         {/* Chat Area */}
-        <View className="flex-1 bg-white rounded-t-3xl">
-          <ScrollView 
+        <View style={styles.chatContainer}>
+          <ScrollView
             ref={scrollViewRef}
-            className="flex-1 px-4 pt-6"
+            style={styles.messagesContainer}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.messagesContent}
           >
             {messages.map(renderMessage)}
-            
-            {/* Typing Indicator */}
-            {isTyping && (
-              <View className="mr-8 mb-4">
-                <View className="flex-row justify-start">
-                  <View className="w-10 h-10 rounded-full bg-blue-500 mr-3 items-center justify-center">
-                    <Text className="text-white font-bold text-lg">A</Text>
-                  </View>
-                  <View className="bg-gray-100 rounded-2xl rounded-bl-sm p-4">
-                    <View className="flex-row space-x-1">
-                      <View className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" />
-                      <View className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-                      <View className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
-                    </View>
-                  </View>
-                </View>
-              </View>
-            )}
+            {isTyping && renderTypingIndicator()}
           </ScrollView>
 
           {/* Input Area */}
-          <View className="px-4 pb-6 border-t border-gray-200">
-            <View className="flex-row items-center space-x-3 mt-4">
-              <View className="flex-1 flex-row items-center bg-gray-100 rounded-full px-4">
+          <View style={styles.inputContainer}>
+            <View style={styles.inputRow}>
+              <View style={styles.textInputContainer}>
                 <TextInput
                   value={currentInput}
                   onChangeText={setCurrentInput}
                   placeholder="Type your response..."
-                  className="flex-1 py-3 text-base"
+                  placeholderTextColor="#999"
+                  style={styles.textInput}
                   multiline
-                  onSubmitEditing={handleSendMessage}
-                  blurOnSubmit={false}
+                  maxLength={500}
                 />
               </View>
-              
+
               {/* Voice Button */}
               <TouchableOpacity
                 onPress={handleVoiceToggle}
-                className={`w-12 h-12 rounded-full items-center justify-center ${
-                  isRecording ? 'bg-red-500' : 'bg-gray-300'
-                }`}
+                style={[
+                  styles.actionButton,
+                  isRecording ? styles.recordingButton : styles.micButton,
+                ]}
               >
-                <Mic size={20} color={isRecording ? 'white' : '#666'} />
+                <Mic size={20} color={isRecording ? "white" : "#666"} />
               </TouchableOpacity>
-              
+
               {/* Send Button */}
               <TouchableOpacity
                 onPress={handleSendMessage}
                 disabled={!currentInput.trim()}
-                className={`w-12 h-12 rounded-full items-center justify-center ${
-                  currentInput.trim() ? 'bg-blue-500' : 'bg-gray-300'
-                }`}
+                style={[
+                  styles.actionButton,
+                  currentInput.trim()
+                    ? styles.sendButton
+                    : styles.disabledButton,
+                ]}
               >
-                <Send size={20} color={currentInput.trim() ? 'white' : '#666'} />
+                <Send
+                  size={20}
+                  color={currentInput.trim() ? "white" : "#666"}
+                />
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </View>
-    </LinearGradient>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  header: {
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.9)",
+    lineHeight: 22,
+  },
+  chatContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  messagesContainer: {
+    flex: 1,
+  },
+  messagesContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  messageContainer: {
+    marginBottom: 16,
+  },
+  annaMessageContainer: {
+    alignItems: "flex-start",
+  },
+  userMessageContainer: {
+    alignItems: "flex-end",
+  },
+  messageRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    maxWidth: "85%",
+  },
+  messageBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    maxWidth: "100%",
+  },
+  annaBubble: {
+    backgroundColor: "#f0f0f0",
+    borderBottomLeftRadius: 4,
+  },
+  userBubble: {
+    backgroundColor: "#007AFF",
+    borderBottomRightRadius: 4,
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  annaMessageText: {
+    color: "#333333",
+  },
+  userMessageText: {
+    color: "#ffffff",
+  },
+  annaAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#667eea",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  annaAvatarText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#e0e0e0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  choicesContainer: {
+    marginTop: 12,
+    gap: 8,
+  },
+  choiceButton: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#007AFF",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  choiceButtonText: {
+    color: "#007AFF",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  typingContainer: {
+    marginBottom: 16,
+    alignItems: "flex-start",
+  },
+  typingDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+  },
+  typingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#999999",
+    marginHorizontal: 2,
+  },
+  inputContainer: {
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  textInputContainer: {
+    flex: 1,
+    backgroundColor: "#f8f8f8",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    minHeight: 40,
+    maxHeight: 100,
+  },
+  textInput: {
+    fontSize: 16,
+    color: "#333333",
+    textAlignVertical: "center",
+  },
+  actionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micButton: {
+    backgroundColor: "#f0f0f0",
+  },
+  recordingButton: {
+    backgroundColor: "#ff4444",
+  },
+  sendButton: {
+    backgroundColor: "#007AFF",
+  },
+  disabledButton: {
+    backgroundColor: "#f0f0f0",
+  },
+});

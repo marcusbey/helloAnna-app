@@ -56,8 +56,12 @@ function AppContent() {
               },
             });
             storeState.setAuthenticated(true);
-            if (profile.onboarding_completed) {
+            // Only mark as onboarded if they have completed signup AND onboarding
+            if (profile.onboarding_completed && profile.email) {
               storeState.setOnboarded(true);
+            } else {
+              // User exists but hasn't completed full onboarding
+              storeState.setOnboarded(false);
             }
           } else {
             // New user - they'll go through onboarding

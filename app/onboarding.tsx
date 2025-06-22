@@ -4,22 +4,19 @@ import { PricingScreen } from "@/components/Onboarding/PricingScreen";
 import { useAppStore } from "@/stores/appStore";
 import { Subscription } from "@/types";
 import { Stack, router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 // Import onboarding components - updated imports
 import { AnnaIntroScreen } from "@/components/Onboarding/AnnaIntroScreen";
-import {
-  AnnaSetupScreen,
-  UserSetupInfo,
-} from "@/components/Onboarding/AnnaSetupScreen";
-import ConversationalOnboarding from "@/components/Onboarding/ConversationalOnboarding";
+import { UserSetupInfo } from "@/components/Onboarding/AnnaSetupScreen";
 import { AudienceGrowthScreen } from "@/components/Onboarding/AudienceGrowthScreen";
 import { BackgroundTasksScreen } from "@/components/Onboarding/BackgroundTasksScreen";
+import ConversationalOnboarding from "@/components/Onboarding/ConversationalOnboarding";
 import { SocialMediaScreen } from "@/components/Onboarding/SocialMediaScreen";
 import { WelcomeScreen } from "@/components/Onboarding/WelcomeScreen";
-import { onboardingStorage } from "@/lib/onboarding-storage";
 import { UserProfile } from "@/lib/onboarding-ai";
+import { onboardingStorage } from "@/lib/onboarding-storage";
 
 export default function OnboardingScreen() {
   const {
@@ -29,10 +26,44 @@ export default function OnboardingScreen() {
     setUser,
     setSubscription,
     setAuthenticated,
+    resetOnboarding,
   } = useAppStore();
 
-  const [userSetupInfo, setUserSetupInfo] = useState<UserSetupInfo | null>(null);
+  const [userSetupInfo, setUserSetupInfo] = useState<UserSetupInfo | null>(
+    null
+  );
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // Debug: Reset onboarding if needed (temporary)
+  useEffect(() => {
+    const shouldReset = false; // Set to true to force reset for testing
+    const skipToConversation = false; // Skip directly to conversation for testing
+    const forceCompleteReset = true;
+    if (forceCompleteReset) {
+      console.log("🔄 Force complete reset including persisted data");
+      resetOnboarding();
+      // Also clear the AsyncStorage manually
+      import("@react-native-async-storage/async-storage").then(
+        (AsyncStorage) => {
+          AsyncStorage.removeItem("anna-storage");
+        }
+      );
+      return;
+    }
+
+    if (shouldReset) {
+      console.log("🔄 Force resetting onboarding for testing");
+      resetOnboarding();
+
+      if (skipToConversation) {
+        console.log("⏭️ Skipping directly to conversation for testing");
+        // Wait a moment for reset to complete, then skip to conversation
+        setTimeout(() => {
+          setOnboardingStep("conversation-name");
+        }, 100);
+      }
+    }
+  }, []);
 
   // Anna Intro Screen handlers
   const handleAnnaIntroStart = () => {
@@ -96,15 +127,15 @@ export default function OnboardingScreen() {
   // Conversation handlers - for conversational onboarding phase
   const handleConversationComplete = async (profile: UserProfile) => {
     setUserProfile(profile);
-    
+
     // Save to database
     try {
       await onboardingStorage.saveOnboardingProfile(profile);
-      console.log('Profile saved successfully');
+      console.log("Profile saved successfully");
     } catch (error) {
-      console.error('Failed to save profile:', error);
+      console.error("Failed to save profile:", error);
     }
-    
+
     setOnboardingStep("signup");
   };
 
@@ -113,17 +144,18 @@ export default function OnboardingScreen() {
     if (userProfile && email) {
       // Create user setup info from profile
       const setupInfo: UserSetupInfo = {
-        name: userProfile.personal?.name || '',
+        name: userProfile.personal?.name || "",
         email: email,
-        role: userProfile.personal?.role || '',
-        company: userProfile.personal?.company || '',
-        goals: userProfile.goals?.primaryGoals?.[0] || '',
-        challenges: userProfile.workStyle?.challenges?.[0] || '',
-        communicationStyle: userProfile.preferences?.communicationStyle || 'professional'
+        role: userProfile.personal?.role || "",
+        company: userProfile.personal?.company || "",
+        goals: userProfile.goals?.primaryGoals?.[0] || "",
+        challenges: userProfile.workStyle?.challenges?.[0] || "",
+        communicationStyle:
+          userProfile.preferences?.communicationStyle || "professional",
       };
-      
+
       setUserSetupInfo(setupInfo);
-      
+
       setUser({
         id: "1",
         name: setupInfo.name,
@@ -167,13 +199,13 @@ export default function OnboardingScreen() {
         try {
           await onboardingStorage.saveOnboardingProfile({
             ...userProfile,
-            contact: { 
-              ...userProfile.contact, 
-              email: userSetupInfo.email 
-            }
+            contact: {
+              ...userProfile.contact,
+              email: userSetupInfo.email,
+            },
           });
         } catch (error) {
-          console.error('Failed to update profile with Gmail status:', error);
+          console.error("Failed to update profile with Gmail status:", error);
         }
       }
     }
@@ -182,12 +214,27 @@ export default function OnboardingScreen() {
   };
 
   const handleDashboardIntroComplete = () => {
-    setOnboarded(true);
-    setAuthenticated(true);
-    router.replace("/(tabs)");
+    // Only mark as fully onboarded if user has completed signup
+    if (userSetupInfo?.email) {
+      setOnboarded(true);
+      setAuthenticated(true);
+      router.replace("/(tabs)");
+    } else {
+      console.error("Cannot complete onboarding without user signup");
+      // Redirect back to signup if no email
+      setOnboardingStep("signup");
+    }
   };
 
   const renderCurrentStep = () => {
+    console.log("🎯 Current onboarding step:", onboardingStep);
+
+    // Emergency reset function (for debugging)
+    if (onboardingStep === "emergency-reset") {
+      resetOnboarding();
+      return null;
+    }
+
     switch (onboardingStep) {
       // Initial Welcome/Authentication Screen
       case "anna-intro-1":
@@ -223,7 +270,9 @@ export default function OnboardingScreen() {
       case "conversation-challenge":
       case "conversation-style":
       case "conversation-goals":
-        return <ConversationalOnboarding onComplete={handleConversationComplete} />;
+        return (
+          <ConversationalOnboarding onComplete={handleConversationComplete} />
+        );
 
       // Account Creation (Signup Wall)
       case "signup":
